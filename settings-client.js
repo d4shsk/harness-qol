@@ -10,6 +10,8 @@ function createModulesStore() {
     images: true,
     console: true,
     messages: true,
+    instructions: true,
+    mcp: true,
   };
 
   let state = { ...DEFAULT_MODULES };
@@ -121,6 +123,8 @@ const qolModuleInfo = [
   { id: 'images', title: 'Image Preview & Copy', description: 'Preview full-size images and copy them to the clipboard.' },
   { id: 'console', title: 'Interactive Process Console', description: 'Launch stdin-enabled background processes and send commands in the Processes chat view. Existing ordinary jobs stay read-only.' },
   { id: 'messages', title: 'Message Editing', description: 'Edit already sent messages in chat and queued messages before they are processed.' },
+  { id: 'instructions', title: 'Agent Instructions (AGENTS.md)', description: 'Edit global and workspace AGENTS.md in Settings, and allow the agent to append guidelines on request.' },
+  { id: 'mcp', title: 'MCP Servers Manager', description: 'Manage Model Context Protocol servers in Settings with connection status, tool inspection, and easy installation.' },
 ];
 
 function registerSettingsClient(ctx, React, t, store = qolModulesStore) {

@@ -2,6 +2,8 @@ import { registerBtw } from './btw.js';
 import { registerConsole } from './console.js';
 import { registerModelDefaults } from './model-defaults.js';
 import { registerMessageEditor } from './messages.js';
+import { registerInstructions } from './instructions.js';
+import { registerMcp } from './mcp.js';
 import { getSettingsState, registerSettingsHttp } from './settings-state.js';
 
 export const name = 'harness-qol';
@@ -15,6 +17,8 @@ export function apply(ctx) {
   registerBtw(ctx, state);
   registerModelDefaults(ctx, state);
   registerMessageEditor(ctx, state);
+  registerInstructions(ctx, state);
+  registerMcp(ctx, state);
 }
 
 

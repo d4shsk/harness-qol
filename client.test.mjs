@@ -28,6 +28,8 @@ test('client.js: successfully generated, valid syntax, and registers module load
   assert.equal(code.includes('${quote}'), false, 'client.js must not contain literal ${quote}');
   assert.equal(code.includes('${workspaces}'), false, 'client.js must not contain literal ${workspaces}');
   assert.equal(code.includes('${messages}'), false, 'client.js must not contain literal ${messages}');
+  assert.equal(code.includes('${instructions}'), false, 'client.js must not contain literal ${instructions}');
+  assert.equal(code.includes('${mcpClient}'), false, 'client.js must not contain literal ${mcpClient}');
 
   let moduleDef = null;
   const mockWindow = {
