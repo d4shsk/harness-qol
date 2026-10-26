@@ -4,6 +4,7 @@ import { registerModelDefaults } from './model-defaults.js';
 import { registerMessageEditor } from './messages.js';
 import { registerInstructions } from './instructions.js';
 import { registerMcp } from './mcp.js';
+import { registerWebSearch } from './web-search.js';
 import { getSettingsState, registerSettingsHttp } from './settings-state.js';
 
 export const name = 'harness-qol';
@@ -19,6 +20,7 @@ export function apply(ctx) {
   registerMessageEditor(ctx, state);
   registerInstructions(ctx, state);
   registerMcp(ctx, state);
+  registerWebSearch(ctx, state);
 }
 
 
