@@ -77,6 +77,35 @@ export function createMessageEditsStore(customPath) {
   };
 }
 
+// Edits replace one model-visible surface node, never append another prompt.
+// Originals remain in the audit log. UI edits can regenerate the latest request.
+export function sentMessageState(session) {
+  const events = typeof session?.snapshotEvents === 'function' ? session.snapshotEvents() : session?.log || [];
+  const roots = new Map();
+  const messages = [];
+  const edits = {};
+  const regenerations = [];
+  for (const event of events) {
+    if (event?.type !== 'user/message' || event.data?.source?.kind !== 'user') continue;
+    const range = event.data.source.qolRegeneration;
+    if (range && Number.isSafeInteger(range.startSeq) && Number.isSafeInteger(range.endSeq) &&
+        range.startSeq >= 0 && range.endSeq >= range.startSeq) regenerations.push(range);
+    if (event.surfaceOp === 'append') {
+      const row = { original: event, current: event };
+      roots.set(event.seq, row);
+      messages.push(row);
+    } else if (event.surfaceOp?.op === 'replace') {
+      const row = roots.get(event.surfaceOp.startSeq);
+      if (!row || row.current.seq !== event.surfaceOp.startSeq || row.original.data.id !== event.data.id) continue;
+      row.current = event;
+      roots.set(event.seq, row);
+      edits[String(row.original.seq)] = textOfContent(event.data.content);
+      edits[row.original.data.id] = textOfContent(event.data.content);
+    }
+  }
+  return { messages, edits, regenerations };
+}
+
 export const messageEditParameters = {
   type: 'object',
   additionalProperties: false,
@@ -106,6 +135,10 @@ export const messageEditParameters = {
       type: 'string',
       description: 'For edit_queue / edit_sent: replacement text.',
     },
+    generate: {
+      type: 'boolean',
+      description: 'For edit_sent: regenerate the latest user request in this session, replacing its previous answer. Earlier messages are only saved. Defaults to false.',
+    },
   },
 };
 
@@ -118,13 +151,13 @@ export function createMessageOperations(ctx, settings, customEditsStore) {
       const found = ctx.agents.get(targetSessionId);
       if (found) return found;
     }
-    if (defaultAgent && defaultAgent.session) return defaultAgent;
+    if (defaultAgent?.session && (!targetSessionId || defaultAgent.session.id === targetSessionId)) return defaultAgent;
     if (targetSessionId && ctx.sessions) {
       // In case session exists without active agent
       const session = ctx.sessions.get(targetSessionId);
       if (session) return { id: targetSessionId, session };
     }
-    return defaultAgent || null;
+    return null;
   }
 
   async function perform(agent, request) {
@@ -192,44 +225,82 @@ export function createMessageOperations(ctx, settings, customEditsStore) {
     }
 
     if (action === 'list_sent') {
-      const session = resolvedAgent?.session || (targetSessionId && ctx.sessions ? ctx.sessions.get(targetSessionId) : null);
-      if (!session) return { messages: [] };
-
-      const events = typeof session.snapshotEvents === 'function'
-        ? session.snapshotEvents()
-        : session.log || [];
-      const userMessages = [];
-
-      for (const event of events) {
-        if (!event || event.type !== 'user/message') continue;
-        const data = event.data;
-        if (!data || data.source?.kind !== 'user') continue;
-        userMessages.push({
-          seq: event.seq,
-          messageId: data.id,
-          time: event.time,
-          text: textOfContent(data.content),
-          attachments: attachmentsOfContent(data.content),
-        });
-      }
-
-      return { messages: userMessages };
+      return { messages: sentMessageState(resolvedAgent?.session).messages.map(({ original, current }) => ({
+        seq: original.seq,
+        messageId: original.data.id,
+        time: original.time,
+        text: textOfContent(current.data.content),
+        attachments: attachmentsOfContent(current.data.content),
+        edited: original !== current,
+      })) };
     }
 
     if (action === 'edit_sent') {
-      const key = request.seq !== undefined ? String(request.seq) : request.messageId;
-      if (!key) throw new Error('seq or messageId is required for edit_sent.');
-      const newText = typeof request.text === 'string' ? request.text.trim() : '';
-      if (!newText) throw new Error('Replacement text cannot be empty.');
-
-      const sid = targetSessionId || 'default';
-      const edits = await editsStore.set(sid, key, newText);
-      return { sessionId: sid, key, text: newText, edits, saved: true };
+      if (request.seq !== undefined && (!Number.isSafeInteger(request.seq) || request.seq < 0)) {
+        throw new Error('seq must be a non-negative safe integer.');
+      }
+      if (request.seq === undefined && !request.messageId) throw new Error('seq or messageId is required for edit_sent.');
+      const newText = typeof request.text === 'string' ? request.text : '';
+      if (!newText.trim()) throw new Error('Replacement text cannot be empty.');
+      const session = resolvedAgent?.session;
+      if (!session?.append || !session.surface) throw new Error('Session editing unavailable / Редактирование сессии недоступно.');
+      if (resolvedAgent.status === 'running') throw new Error('Wait for the response to finish / Дождитесь завершения ответа.');
+      const state = sentMessageState(session);
+      const row = state.messages.find(({ original, current }) =>
+        request.seq !== undefined ? original.seq === request.seq || current.seq === request.seq : original.data.id === request.messageId);
+      if (!row || (request.messageId && row.original.data.id !== request.messageId)) {
+        throw new Error('Sent user message not found / Отправленное сообщение не найдено.');
+      }
+      if (!session.surface.nodes.includes(row.current.seq)) {
+        throw new Error('Message was compacted or replaced; create a new chat / Сообщение уже сжато или заменено; создайте новый чат.');
+      }
+      const generate = request.generate === true;
+      if (generate && typeof resolvedAgent.followup !== 'function') {
+        throw new Error('Generation unavailable for this session / Генерация для этой сессии недоступна.');
+      }
+      const events = session.snapshotEvents();
+      const wakeId = seq => `harness-qol-edit:${session.id}:${seq}`;
+      const queued = id => events.some(event =>
+        event.type === 'user/message' && event.data.id === id ||
+        event.type === 'agent/inbox/spliced' && event.data.inserted?.some(message => message.id === id));
+      const inInbox = id => (resolvedAgent.inbox?.nextTurn || []).some(m => m.id === id);
+      const unchanged = textOfContent(row.current.data.content) === newText;
+      const alreadyStarted = generate && unchanged && row.current.data.source.qolRegeneration && (queued(wakeId(row.current.seq)) || inInbox(wakeId(row.current.seq)));
+      let edited = row.current;
+      if (!unchanged || generate && !alreadyStarted) {
+        // A regeneration shadows the whole response suffix, including tool calls
+        // and results together. Nothing is removed from the append-only audit log.
+        const start = session.surface.nodes.indexOf(row.current.seq);
+        const shadowed = generate ? session.surface.nodes.slice(start) : [row.current.seq];
+        const content = [{ type: 'text', text: newText }, ...row.current.data.content.filter(block => block?.type !== 'text')];
+        const source = generate ? { ...row.current.data.source, qolRegeneration: {
+          startSeq: row.original.seq + 1, endSeq: events.at(-1).seq,
+        } } : row.current.data.source;
+        edited = session.append('user/message', { ...row.current.data, source, content }, {
+          surfaceOp: { op: 'replace', startSeq: shadowed[0], endSeq: shadowed.at(-1) },
+          sourceEventSeqs: shadowed,
+        });
+      }
+      if (generate && !alreadyStarted) {
+        // Public Agent API: a runtime-context wake triggers a normal turn
+        // without appending any redundant human prompt to the session surface.
+        resolvedAgent.followup({
+          id: wakeId(edited.seq), role: 'user',
+          source: { kind: 'runtime-context' },
+          content: [{ type: 'text', text: '' }],
+        });
+      }
+      const updated = sentMessageState(session);
+      return {
+        sessionId: session.id, key: String(row.original.seq), text: newText,
+        edits: updated.edits, regenerations: updated.regenerations,
+        saved: true, applied: true, generationStarted: generate,
+      };
     }
 
     if (action === 'get_edits') {
-      const sid = targetSessionId || 'default';
-      return { edits: editsStore.get(sid) };
+      const state = sentMessageState(resolvedAgent?.session);
+      return { edits: state.edits, regenerations: state.regenerations, applied: true };
     }
 
     throw new Error(`Unknown action: ${action}`);
@@ -253,7 +324,7 @@ export function registerMessageEditor(ctx, settings) {
 
   ctx.effect(() => ctx.tools.register({
     name: 'harness_qol_message_edit',
-    description: 'Edit already sent messages or messages in the queue (preserving image and file attachments).',
+    description: 'Edit queued or sent user messages, preserving attachments. Sent edits require an idle session. With generate:true, editing the latest request replaces its response suffix and starts a new answer in the same chat; earlier messages are only saved. Originals remain in the audit log.',
     parameters: messageEditParameters,
     output: {
       schema: { type: 'object', additionalProperties: true },
