@@ -1,114 +1,111 @@
 // Harness-QOL module controls, rendered on the bundle's Plugins detail page.
 // Concatenate inside the Client ModuleLoader factory.
 
-function createModulesStore() {
-  const DEFAULT_MODULES = {
-    workspaces: true,
-    models: true,
-    btw: true,
-    quote: true,
-    images: true,
-    console: true,
-    messages: true,
-    instructions: true,
-    mcp: true,
-    webSearch: true,
-  };
+async function requestQolSettings(payload) {
+  // Desktop owns its carrier (and authentication); native fetch bypasses it.
+  // Use an exact /api route so the same operation works in Web and Desktop.
+  const transport = globalThis.__DSH_TRANSPORT__;
+  const response = await (transport?.fetch ? transport.fetch('api/harness-qol/settings', {
+    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+  }) : fetch('api/harness-qol/settings', {
+    method: 'POST', credentials: 'same-origin', headers: { 'content-type': 'application/json' }, body: JSON.stringify(payload),
+  }));
+  let data;
+  try { data = await response.json(); } catch { throw new Error(`Settings: HTTP ${response.status}`); }
+  if (!response.ok || !data?.ok || !data.modules) throw new Error(data?.error || `Settings: HTTP ${response.status}`);
+  return data.modules;
+}
 
+function createModulesStore(request = requestQolSettings) {
+  const DEFAULT_MODULES = {
+    workspaces: true, models: true, btw: true, quote: true, images: true,
+    console: true, messages: true, instructions: true, mcp: true, webSearch: true,
+  };
+  function normalize(value) {
+    return Object.fromEntries(Object.entries(DEFAULT_MODULES).map(([id, fallback]) =>
+      [id, typeof value?.[id] === 'boolean' ? value[id] : fallback]));
+  }
   let state = { ...DEFAULT_MODULES };
   try {
     const cached = typeof localStorage !== 'undefined' ? localStorage.getItem('harness_qol_modules') : null;
-    if (cached) {
-      const parsed = JSON.parse(cached);
-      if (parsed && typeof parsed === 'object') {
-        state = { ...DEFAULT_MODULES, ...parsed };
-      }
-    }
+    if (cached) state = normalize(JSON.parse(cached));
   } catch (_e) {}
-
+  let confirmed = { ...state };
+  let revision = 0;
+  let syncRevision = 0;
+  let pending = 0;
+  let error = '';
+  let queue = Promise.resolve();
   const listeners = new Set();
-  const notify = () => {
-    listeners.forEach(fn => {
-      try { fn(state); } catch (_e) {}
-    });
-  };
-
+  function notify() {
+    for (const fn of listeners) { try { fn({ ...state }); } catch (_e) {} }
+  }
+  function cache() {
+    try {
+      if (typeof localStorage !== 'undefined') localStorage.setItem('harness_qol_modules', JSON.stringify(confirmed));
+    } catch (_e) {}
+  }
   async function sync() {
+    const version = revision;
+    const read = ++syncRevision;
+    if (pending) return false;
     try {
-      if (typeof fetch === 'undefined') return;
-      const res = await fetch('/harness-qol/settings');
-      if (res.ok) {
-        const data = await res.json();
-        if (data && data.ok && data.modules) {
-          state = { ...DEFAULT_MODULES, ...data.modules };
-          try {
-            if (typeof localStorage !== 'undefined') {
-              localStorage.setItem('harness_qol_modules', JSON.stringify(state));
-            }
-          } catch (_e) {}
-          notify();
-        }
+      const modules = await request({});
+      // Opening the panel must not overwrite a click made while GET was pending.
+      if (version !== revision || read !== syncRevision || pending) return false;
+      confirmed = normalize(modules);
+      state = { ...confirmed };
+      error = '';
+      cache();
+      notify();
+      return true;
+    } catch (err) {
+      if (version === revision && read === syncRevision && !pending) {
+        error = err.message || String(err);
+        notify();
       }
-    } catch (_e) {}
-  }
-
-  async function setModule(id, enabled) {
-    state = { ...state, [id]: !!enabled };
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('harness_qol_modules', JSON.stringify(state));
-      }
-    } catch (_e) {}
-    notify();
-
-    try {
-      if (typeof fetch !== 'undefined') {
-        await fetch('/harness-qol/settings', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ id, enabled: !!enabled }),
-        });
-      }
-    } catch (_e) {}
-  }
-
-  async function setAll(enabled) {
-    const next = {};
-    for (const key of Object.keys(DEFAULT_MODULES)) {
-      next[key] = !!enabled;
+      return false;
     }
-    state = next;
-    try {
-      if (typeof localStorage !== 'undefined') {
-        localStorage.setItem('harness_qol_modules', JSON.stringify(state));
-      }
-    } catch (_e) {}
-    notify();
-
-    try {
-      if (typeof fetch !== 'undefined') {
-        await fetch('/harness-qol/settings', {
-          method: 'POST',
-          headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({ modules: next }),
-        });
-      }
-    } catch (_e) {}
   }
-
+  function update(patch, payload) {
+    const version = ++revision;
+    pending++;
+    error = '';
+    state = { ...state, ...patch };
+    notify();
+    const operation = queue.then(async () => {
+      try {
+        confirmed = normalize(await request(payload));
+        cache();
+        if (version === revision) state = { ...confirmed };
+        return true;
+      } catch (err) {
+        if (version === revision) {
+          state = { ...confirmed };
+          error = err.message || String(err);
+        }
+        return false;
+      } finally {
+        pending--;
+        notify();
+      }
+    });
+    queue = operation;
+    return operation;
+  }
   return {
-    get() {
-      return state;
+    get: () => ({ ...state }),
+    getStatus: () => ({ pending: pending > 0, error }),
+    isEnabled: id => state[id] !== false,
+    setModule(id, enabled) {
+      if (!Object.hasOwn(DEFAULT_MODULES, id)) return Promise.resolve(false);
+      return update({ [id]: !!enabled }, { id, enabled: !!enabled });
     },
-    isEnabled(id) {
-      return state[id] !== false;
+    setAll(enabled) {
+      const modules = Object.fromEntries(Object.keys(DEFAULT_MODULES).map(id => [id, !!enabled]));
+      return update(modules, { modules });
     },
-    setModule,
-    setAll,
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
+    subscribe(fn) { listeners.add(fn); return () => listeners.delete(fn); },
     sync,
   };
 }
@@ -138,6 +135,7 @@ function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
       enabledCount: '{count} of {total} enabled',
       enableAll: 'Enable all', disableAll: 'Disable all',
       statusEnabled: 'Enabled', statusDisabled: 'Disabled',
+      saving: 'Saving…', saveFailed: 'Could not save or load settings:', retry: 'Retry',
       saveHint: 'Changes are saved automatically. Model defaults can be configured in Settings → Models.',
     },
     ru: {
@@ -145,6 +143,7 @@ function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
       enabledCount: 'Включено {count} из {total}',
       enableAll: 'Включить все', disableAll: 'Выключить все',
       statusEnabled: 'Включён', statusDisabled: 'Отключён',
+      saving: 'Сохранение…', saveFailed: 'Не удалось сохранить или загрузить настройки:', retry: 'Повторить',
       saveHint: 'Изменения сохраняются автоматически. Модель по умолчанию настраивается в Настройки → Модели.',
     },
   };
@@ -163,7 +162,8 @@ function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
 .hq-set-actions{display:flex;gap:8px;flex-wrap:wrap}
 .hq-set-btn{padding:5px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}
 .hq-set-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
-.hq-set-btn:disabled{opacity:.4;cursor:default}
+.hq-set-btn:disabled,.hq-set-switch:disabled{opacity:.4;cursor:default}
+.hq-set-error{color:var(--dsw-alias-state-error-primary);font-size:13px;overflow-wrap:anywhere}
 .hq-set-list{border-top:1px solid var(--dsw-alias-border-l2)}
 .hq-set-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
 .hq-set-copy{min-width:0}
@@ -185,21 +185,23 @@ function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
     React.useEffect(() => {
       const unsubscribe = store.subscribe(next => setModules({ ...next }));
       setModules(store.get());
-      // Reconcile persisted values whenever the plugin page is reopened.
       store.sync();
       return unsubscribe;
     }, []);
+    const { pending, error } = store.getStatus();
     const enabledCount = qolModuleInfo.filter(({ id }) => modules[id] !== false).length;
     const countText = st('enabledCount').replace('{count}', String(enabledCount)).replace('{total}', String(qolModuleInfo.length));
-    return h('section', { className: 'hq-set-wrap', 'data-harness-qol-settings': true, 'aria-label': st('title') },
+    return h('section', { className: 'hq-set-wrap', 'data-harness-qol-settings': true, 'aria-label': st('title'), 'aria-busy': pending },
       h('style', null, css),
       h('div', { className: 'hq-set-header' },
         h('div', { className: 'hq-set-heading' },
           h('h3', { className: 'hq-set-title' }, st('title')),
           h('span', { className: 'hq-set-counter', role: 'status', 'aria-live': 'polite' }, countText)),
         h('div', { className: 'hq-set-actions' },
-          h('button', { type: 'button', className: 'hq-set-btn', disabled: enabledCount === qolModuleInfo.length, onClick: () => store.setAll(true) }, st('enableAll')),
-          h('button', { type: 'button', className: 'hq-set-btn', disabled: enabledCount === 0, onClick: () => store.setAll(false) }, st('disableAll')))),
+          h('button', { type: 'button', className: 'hq-set-btn', disabled: pending || enabledCount === qolModuleInfo.length, onClick: () => store.setAll(true) }, st('enableAll')),
+          h('button', { type: 'button', className: 'hq-set-btn', disabled: pending || enabledCount === 0, onClick: () => store.setAll(false) }, st('disableAll')))),
+      error && h('div', { className: 'hq-set-error', role: 'alert' }, `${st('saveFailed')} ${error} `,
+        h('button', { type: 'button', className: 'hq-set-btn', disabled: pending, onClick: () => store.sync() }, st('retry'))),
       h('div', { className: 'hq-set-list' }, qolModuleInfo.map(({ id, title, description }) => {
         const enabled = modules[id] !== false;
         const titleId = `hq-module-${id}-title`;
@@ -209,19 +211,16 @@ function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
             h('h4', { id: titleId, className: 'hq-set-name' }, title),
             h('p', { id: descriptionId, className: 'hq-set-desc' }, description)),
           h('button', {
-            type: 'button', role: 'switch', className: 'hq-set-switch',
+            type: 'button', role: 'switch', className: 'hq-set-switch', disabled: pending,
             'aria-checked': enabled, 'aria-labelledby': titleId, 'aria-describedby': descriptionId,
             title: `${title}: ${st(enabled ? 'statusEnabled' : 'statusDisabled')}`,
             onClick: () => store.setModule(id, !enabled),
           }, h('span', { className: 'hq-set-thumb', 'aria-hidden': true })));
       })),
-      h('p', { className: 'hq-set-footer' }, st('saveHint')));
+      h('p', { className: 'hq-set-footer' }, pending ? st('saving') : st('saveHint')));
   }
 
-  // Public, package-keyed slot: visible only on Plugins → Harness-QOL.
-  // No Settings navigation entry, DOM observer, or polling timer is needed.
   ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
-    name: 'plugins.bundle.config',
-    key: '@local/harness-qol',
+    name: 'plugins.bundle.config', key: '@local/harness-qol',
   }, HarnessQolModulesView));
 }

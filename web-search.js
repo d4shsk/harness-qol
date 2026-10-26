@@ -3,18 +3,20 @@ import { getSettingsState } from './settings-state.js';
 export function registerWebSearch(ctx, settingsState) {
   const state = settingsState || getSettingsState();
   const activeRestrictions = new Map();
+  let stopped = false;
 
   function applyRestriction(agent) {
-    if (!agent || !agent.id || activeRestrictions.has(agent.id)) return;
-    const tools = agent.ctx?.get?.('tools') || agent.ctx?.tools || ctx.get?.('tools') || ctx.tools;
-    if (!tools || typeof tools.restrict !== 'function') return;
+    if (stopped || !agent?.id || activeRestrictions.has(agent.id)) return;
+    // Never fall back to a global context: restrict() is agent-scoped.
+    const tools = agent.ctx?.get?.('tools');
+    if (!tools?.get('web_search', agent)) return;
+    // restrict() synchronously emits tools/change BEFORE returning its disposer.
+    // Reserve the agent first so this notification cannot re-enter registration.
+    activeRestrictions.set(agent.id, null);
     try {
-      const view = tools.view?.(agent);
-      if (view?.restrictableNames?.has('web_search')) {
-        const unrestrict = tools.restrict({ deny: ['web_search'] });
-        activeRestrictions.set(agent.id, unrestrict);
-      }
+      activeRestrictions.set(agent.id, tools.restrict({ deny: ['web_search'] }));
     } catch (err) {
+      activeRestrictions.delete(agent.id);
       console.warn('[harness-qol:web-search] Failed to restrict web_search for agent', agent.id, err);
     }
   }
@@ -32,9 +34,11 @@ export function registerWebSearch(ctx, settingsState) {
   }
 
   function unrestrictAll() {
-    for (const [id, unrestrict] of activeRestrictions.entries()) {
+    const entries = [...activeRestrictions];
+    activeRestrictions.clear();
+    for (const [id, unrestrict] of entries) {
       try {
-        unrestrict();
+        unrestrict?.();
       } catch (err) {
         console.warn('[harness-qol:web-search] Failed to unrestrict web_search for agent', id, err);
       }
@@ -43,6 +47,7 @@ export function registerWebSearch(ctx, settingsState) {
   }
 
   function reconcileAll() {
+    if (stopped) return;
     if (!state.isModuleEnabled('webSearch')) {
       const agentsService = ctx.get?.('agents') || ctx.agents;
       const agentsList = agentsService?.list?.() || [];
@@ -94,6 +99,7 @@ export function registerWebSearch(ctx, settingsState) {
     });
 
     scope.effect(() => () => {
+      stopped = true;
       unsubscribe();
       unrestrictAll();
     });

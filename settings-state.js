@@ -1,5 +1,4 @@
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
-import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -24,6 +23,13 @@ export function createSettingsState(customFilePath) {
   const filePath = customFilePath || SETTINGS_FILE;
   let modules = { ...DEFAULT_MODULES };
   const listeners = new Set();
+  let loading;
+  let queue = Promise.resolve();
+  function enqueue(operation) {
+    const result = queue.then(operation);
+    queue = result.catch(() => {});
+    return result;
+  }
 
   function sanitize(input) {
     if (!input || typeof input !== 'object' || Array.isArray(input)) return {};
@@ -36,36 +42,40 @@ export function createSettingsState(customFilePath) {
     return sanitized;
   }
 
-  async function load() {
-    try {
-      if (existsSync(filePath)) {
-        const raw = await readFile(filePath, 'utf8');
-        const data = JSON.parse(raw);
-        if (data && typeof data === 'object' && data.modules) {
-          const sanitized = sanitize(data.modules);
-          modules = { ...DEFAULT_MODULES, ...sanitized };
-        }
+  function load() {
+    return loading ||= enqueue(async () => {
+      try {
+        const data = JSON.parse(await readFile(filePath, 'utf8'));
+        modules = { ...DEFAULT_MODULES, ...sanitize(data?.modules) };
+      } catch (err) {
+        if (err.code !== 'ENOENT') throw err;
       }
-    } catch (err) {
-      console.warn('[harness-qol] Could not load settings file:', err);
-    }
-    return { ...modules };
+      // Listeners may already be mounted while the singleton initializes.
+      notify();
+      return { ...modules };
+    });
   }
 
-  async function save() {
-    try {
-      const dir = dirname(filePath);
-      if (!existsSync(dir)) {
-        await mkdir(dir, { recursive: true });
-      }
-      const data = {
-        modules: { ...modules },
-        updatedAt: new Date().toISOString(),
-      };
-      await writeFile(filePath, JSON.stringify(data, null, 2), 'utf8');
-    } catch (err) {
-      console.error('[harness-qol] Could not save settings file:', err);
-    }
+  async function persist(next) {
+    await mkdir(dirname(filePath), { recursive: true });
+    await writeFile(filePath, JSON.stringify({
+      modules: next, updatedAt: new Date().toISOString(),
+    }, null, 2), 'utf8');
+  }
+
+  function save() {
+    return enqueue(() => persist({ ...modules }));
+  }
+
+  function update(patch) {
+    return enqueue(async () => {
+      const next = { ...modules, ...patch };
+      // Publish only after a successful write; errors must reach the caller.
+      await persist(next);
+      modules = next;
+      notify();
+      return { ...modules };
+    });
   }
 
   function notify() {
@@ -87,17 +97,10 @@ export function createSettingsState(customFilePath) {
       if (!MODULE_IDS.includes(id)) {
         throw new Error(`Unknown module: ${id}`);
       }
-      modules[id] = !!enabled;
-      notify();
-      await save();
-      return { ...modules };
+      return update({ [id]: !!enabled });
     },
     async setModules(nextModules) {
-      const sanitized = sanitize(nextModules);
-      modules = { ...modules, ...sanitized };
-      notify();
-      await save();
-      return { ...modules };
+      return update(sanitize(nextModules));
     },
     subscribe(fn) {
       listeners.add(fn);
@@ -117,6 +120,39 @@ export function getSettingsState() {
     globalThis[globalKey] = instance;
   }
   return globalThis[globalKey];
+}
+
+export async function settingsOperation(state, payload = {}) {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) throw new Error('Invalid settings payload');
+  if (Object.hasOwn(payload, 'id')) {
+    if (typeof payload.enabled !== 'boolean') throw new Error('enabled must be a boolean');
+    return state.setModule(payload.id, payload.enabled);
+  }
+  if (Object.hasOwn(payload, 'modules')) {
+    if (!payload.modules || typeof payload.modules !== 'object' || Array.isArray(payload.modules)) throw new Error('Invalid modules');
+    return state.setModules(payload.modules);
+  }
+  if (Object.keys(payload).length) throw new Error('Invalid settings payload');
+  return state.getModules();
+}
+
+export function registerSettingsConnection(ctx, state) {
+  const connection = ctx.get('connection');
+  ctx.effect(() => connection.fetch.register({
+    path: '/api/harness-qol/settings', methods: ['POST'], requestBody: 'buffered',
+    async fetch(request) {
+      const send = (status, data) => Response.json(data, { status, headers: { 'cache-control': 'no-store' } });
+      if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') || '')) return send(415, { ok: false, error: 'JSON required' });
+      try {
+        const text = await request.text();
+        if (Buffer.byteLength(text) > 64 * 1024) return send(413, { ok: false, error: 'Payload too large' });
+        const modules = await settingsOperation(state, JSON.parse(text));
+        return send(200, { ok: true, modules });
+      } catch (error) {
+        return send(400, { ok: false, error: error.message });
+      }
+    },
+  }));
 }
 
 export function registerSettingsHttp(ctx, state) {

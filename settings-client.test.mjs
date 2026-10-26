@@ -12,9 +12,16 @@ scope.createModulesStore = createModulesStore;
 fn(scope);
 
 const { createModulesStore } = scope;
+function memoryStore() {
+  let modules = allModules(true);
+  return createModulesStore(async payload => {
+    modules = payload.modules ? { ...payload.modules } : payload.id ? { ...modules, [payload.id]: payload.enabled } : modules;
+    return { ...modules };
+  });
+}
 
 test('createModulesStore: initializes with all modules enabled', () => {
-  const store = createModulesStore();
+  const store = memoryStore();
   const state = store.get();
   assert.equal(state.workspaces, true);
   assert.equal(state.models, true);
@@ -32,7 +39,7 @@ test('createModulesStore: initializes with all modules enabled', () => {
 });
 
 test('createModulesStore: setModule updates module and notifies subscribers', async () => {
-  const store = createModulesStore();
+  const store = memoryStore();
   let latest = null;
   const unsub = store.subscribe(s => { latest = s; });
 
@@ -48,7 +55,7 @@ test('createModulesStore: setModule updates module and notifies subscribers', as
 });
 
 test('createModulesStore: setAll toggles all modules simultaneously', async () => {
-  const store = createModulesStore();
+  const store = memoryStore();
   await store.setAll(false);
   const allFalse = store.get();
   assert.equal(allFalse.workspaces, false);
@@ -207,8 +214,8 @@ function createSettingsFixture({ language = 'en', cached = allModules(true), ser
       requests.push({ url, options });
       if (options?.method === 'POST') {
         const payload = JSON.parse(options.body);
-        serverModules = payload.modules ? { ...payload.modules } : { ...serverModules, [payload.id]: payload.enabled };
-        return { ok: true };
+        if (payload.modules) serverModules = { ...payload.modules };
+        else if (payload.id) serverModules = { ...serverModules, [payload.id]: payload.enabled };
       }
       const modules = { ...serverModules };
       return { ok: true, json: async () => ({ ok: true, modules }) };
@@ -329,10 +336,10 @@ function assertAccessibleModules(fixture, expected) {
 }
 
 function assertPersistence(fixture, payloads, states) {
-  const posts = fixture.requests.filter(request => request.options?.method === 'POST');
+  const posts = fixture.requests.filter(request => request.options?.body !== '{}');
   assert.equal(posts.length, payloads.length);
   posts.forEach(({ url, options }, index) => {
-    assert.equal(url, '/harness-qol/settings');
+    assert.equal(url, 'api/harness-qol/settings');
     assert.equal(options.method, 'POST');
     assert.deepEqual(plain(options.headers), { 'content-type': 'application/json' });
     assert.deepEqual(JSON.parse(options.body), payloads[index]);
@@ -442,8 +449,8 @@ test('settings UI: cleans up subscriptions and syncs persisted settings on each 
   assertAccessibleModules(fixture, initialServer);
   assert.equal(fixture.subscriptions.active, 1);
   assert.equal(fixture.localeSubscribers, 1);
-  const getRequests = () => fixture.requests.filter(({ options }) => !options?.method);
-  assert.deepEqual(getRequests().map(({ url }) => url), ['/harness-qol/settings']);
+  const getRequests = () => fixture.requests.filter(({ options }) => options?.body === '{}');
+  assert.deepEqual(getRequests().map(({ url }) => url), ['api/harness-qol/settings']);
 
   await fixture.store.setModule('images', false);
   assertAccessibleModules(fixture, { ...initialServer, images: false });

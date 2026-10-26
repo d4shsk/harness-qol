@@ -48,10 +48,13 @@ function createMockCordis(toolsMap = new Map()) {
       for (const d of filter.deny || []) {
         scope._deniedTools.add(d);
       }
+      // Real Cordis notifies synchronously, including during restriction setup.
+      ctx.emit('tools/change');
       return () => {
         for (const d of filter.deny || []) {
           scope._deniedTools.delete(d);
         }
+        ctx.emit('tools/change');
       };
     },
     guard(fn) {
@@ -112,9 +115,8 @@ function createMockCordis(toolsMap = new Map()) {
         get(name) {
           if (name === 'tools') {
             return {
-              ...toolsService,
+              restrict: toolsService.restrict,
               _currentScope: agent,
-              view: a => toolsService.view(a || agent),
               get: (n, a) => toolsService.get(n, a || agent),
             };
           }

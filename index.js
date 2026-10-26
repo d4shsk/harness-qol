@@ -5,12 +5,14 @@ import { registerMessageEditor } from './messages.js';
 import { registerInstructions } from './instructions.js';
 import { registerMcp } from './mcp.js';
 import { registerWebSearch } from './web-search.js';
-import { getSettingsState, registerSettingsHttp } from './settings-state.js';
+import { getSettingsState, registerSettingsHttp, registerSettingsConnection } from './settings-state.js';
 
 export const name = 'harness-qol';
 export const inject = ['commands', 'llm', 'sessions', 'agentDefaultModel', 'tools', 'configEditor', 'agents'];
-export function apply(ctx) {
+export async function apply(ctx) {
   const state = getSettingsState();
+  await state.load();
+  ctx.inject(['connection'], scope => registerSettingsConnection(scope, state));
   ctx.inject(['webServer'], scope => {
     registerSettingsHttp(scope, state);
   });
