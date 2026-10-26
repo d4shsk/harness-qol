@@ -1,10 +1,11 @@
 import { registerBtw } from './btw.js';
 import { registerConsole } from './console.js';
 import { registerModelDefaults } from './model-defaults.js';
+import { registerMessageEditor } from './messages.js';
 import { getSettingsState, registerSettingsHttp } from './settings-state.js';
 
 export const name = 'harness-qol';
-export const inject = ['commands', 'llm', 'sessions', 'agentDefaultModel', 'tools', 'configEditor'];
+export const inject = ['commands', 'llm', 'sessions', 'agentDefaultModel', 'tools', 'configEditor', 'agents'];
 export function apply(ctx) {
   const state = getSettingsState();
   ctx.inject(['webServer'], scope => {
@@ -13,5 +14,7 @@ export function apply(ctx) {
   ctx.inject(['jobs', 'subprocess', 'sandboxPolicy', 'sandbox', 'fs', 'workingDirectory'], scope => registerConsole(scope, state));
   registerBtw(ctx, state);
   registerModelDefaults(ctx, state);
+  registerMessageEditor(ctx, state);
 }
+
 

@@ -9,6 +9,7 @@ function createModulesStore() {
     quote: true,
     images: true,
     console: true,
+    messages: true,
   };
 
   let state = { ...DEFAULT_MODULES };
@@ -119,6 +120,7 @@ const qolModuleInfo = [
   { id: 'quote', title: 'Reply Quoting', description: 'Quote selected assistant text in your next message.' },
   { id: 'images', title: 'Image Preview & Copy', description: 'Preview full-size images and copy them to the clipboard.' },
   { id: 'console', title: 'Interactive Process Console', description: 'Launch stdin-enabled background processes and send commands in the Processes chat view. Existing ordinary jobs stay read-only.' },
+  { id: 'messages', title: 'Message Editing', description: 'Edit already sent messages in chat and queued messages before they are processed.' },
 ];
 
 function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
