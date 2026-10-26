@@ -7,6 +7,9 @@ function registerWorkspacesClient(ctx, React, store) {
       manage: 'Workspaces', create: 'Create workspace', edit: 'Edit workspace', name: 'Workspace name',
       roots: 'Source folders', add: 'Add folder', remove: 'Remove folder', primary: 'Primary',
       source: 'This computer',
+      chooseWorkspace: 'Select a workspace to edit its name and folders.',
+      empty: 'No workspaces yet. Add one using the sidebar’s + button.',
+      saved: 'Workspace saved.',
       cancel: 'Cancel', save: 'Save changes', saving: 'Saving…', close: 'Close',
       primaryHint: 'The primary folder stays fixed to preserve existing chats.', loading: 'Loading…', retry: 'Retry',
       folders: 'folders', editWorkspaceMenu: 'Edit workspace…',
@@ -18,6 +21,9 @@ function registerWorkspacesClient(ctx, React, store) {
       manage: 'Workspaces', create: 'Создать workspace', edit: 'Редактировать workspace', name: 'Название workspace',
       roots: 'Исходные папки', add: 'Добавить папку', remove: 'Убрать папку', primary: 'Основная',
       source: 'Этот компьютер',
+      chooseWorkspace: 'Выберите workspace, чтобы изменить название и список папок.',
+      empty: 'Пока нет workspace. Добавьте его кнопкой + в боковой панели.',
+      saved: 'Workspace сохранён.',
       cancel: 'Отменить', save: 'Сохранить изменения', saving: 'Сохранение…', close: 'Закрыть',
       primaryHint: 'Основная папка закреплена для совместимости с существующими чатами.', loading: 'Загрузка…', retry: 'Повторить',
       folders: 'папок', editWorkspaceMenu: 'Редактировать workspace…',
@@ -55,11 +61,12 @@ function registerWorkspacesClient(ctx, React, store) {
   }
 
   const css = `
-.hq-ws-dialog{box-sizing:border-box;width:min(580px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:22px;border:1px solid var(--dsw-alias-border-l1);border-radius:20px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;overflow:auto;box-shadow:0 16px 48px rgba(0,0,0,0.2)}
+.hq-ws-dialog{box-sizing:border-box;width:min(580px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:22px;border:1px solid var(--dsw-alias-border-l1);border-radius:20px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;overflow:auto;pointer-events:auto;box-shadow:0 16px 48px color-mix(in srgb,var(--dsw-alias-bg-base) 70%,transparent)}
 .hq-ws-dialog::backdrop{background:color-mix(in srgb,var(--dsw-alias-bg-base) 72%,transparent)}
 .hq-ws-dialog *{box-sizing:border-box}.hq-ws-dialog h2{margin:0;font-size:20px;font-weight:600}.hq-ws-dialog h3{margin:0;font-size:14px;font-weight:600}
 .hq-ws-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
 .hq-ws-grid{display:grid;gap:16px;min-width:0}
+.hq-ws-body{min-height:min(300px,calc(100dvh - 150px))}
 .hq-ws-sources{display:grid;gap:10px;min-width:0}
 .hq-ws-sources-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
 .hq-ws-source{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--dsw-alias-label-secondary)}
@@ -87,6 +94,20 @@ function registerWorkspacesClient(ctx, React, store) {
 .hq-ws-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;font:inherit;font-size:13px;color:var(--dsw-alias-label-primary);background:transparent;border:0;border-radius:6px;cursor:pointer;text-align:left}
 .hq-ws-menu-item:hover{background:var(--dsw-alias-bg-layer-2)}
 .hq-ws-menu-item svg{flex:none;color:var(--dsw-alias-label-secondary)}
+.hq-ws-launcher{display:inline-flex;align-items:center;justify-content:center;gap:6px;min-width:0;max-width:130px;height:36px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--dsw-alias-label-secondary);font:inherit;font-size:13px;cursor:pointer}
+.hq-ws-launcher[data-wide=false]{width:36px;padding:0}.hq-ws-launcher svg{flex:none;width:18px;height:18px}
+.hq-ws-launcher span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hq-ws-launcher:hover{background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary)}
+.hq-ws-launcher:focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
+.hq-ws-hint{margin:0;color:var(--dsw-alias-label-secondary);font-size:13px;line-height:1.5}
+.hq-ws-list{display:grid;gap:8px;margin:0;padding:0;list-style:none}
+.hq-ws-dialog .hq-ws-workspace{display:flex;align-items:center;gap:12px;width:100%;padding:12px;text-align:left;background:transparent}
+.hq-ws-dialog .hq-ws-workspace:hover{background:var(--dsw-alias-bg-layer-2)}
+.hq-ws-workspace>svg{flex:none;color:var(--dsw-alias-label-secondary)}
+.hq-ws-workspace-copy{display:grid;gap:4px;min-width:0;flex:1}
+.hq-ws-workspace-title{font-size:14px;font-weight:500;overflow-wrap:anywhere}
+.hq-ws-workspace-path{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
+.hq-ws-workspace-count{flex:none;font-size:12px;color:var(--dsw-alias-label-secondary)}
 @media(max-width:480px){.hq-ws-dialog{padding:18px}.hq-ws-dialog h2{font-size:18px}.hq-ws-actions button{flex:1}}
 `;
 
@@ -113,13 +134,15 @@ function registerWorkspacesClient(ctx, React, store) {
     }, []);
     return h(React.Fragment, null, h('style', null, css),
       h('dialog', { ref, className: 'hq-ws-dialog', 'aria-labelledby': titleId, 'aria-busy': !!busy,
-        onCancel: event => { event.preventDefault(); if (!busy) onClose(); } },
+        onCancel: event => { event.preventDefault(); event.stopPropagation(); if (!busy) onClose(); },
+        onKeyDown: event => { if (event.key === 'Escape') event.stopPropagation(); },
+        onKeyUp: event => { if (event.key === 'Escape') event.stopPropagation(); } },
         h('header', { className: 'hq-ws-header' }, h('h2', { id: titleId }, title),
           h('button', { className: 'hq-ws-icon', type: 'button', 'aria-label': t('close'), disabled: busy, onClick: onClose }, '×')),
         children));
   }
 
-  function Editor({ initial, onSaved, onClose, externalBusy = false }) {
+  function Editor({ initial, onSaved, onClose, externalBusy = false, embedded = false, onBusyChange }) {
     const [title, setTitle] = React.useState(initial?.title ?? '');
     const [folders, setFolders] = React.useState(initial?.folders ?? []);
     const [busy, setBusy] = React.useState(false);
@@ -129,6 +152,10 @@ function registerWorkspacesClient(ctx, React, store) {
     const pending = React.useRef(false);
     React.useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
     const disabled = busy || picking || externalBusy;
+    React.useEffect(() => {
+      onBusyChange?.(disabled);
+      return () => onBusyChange?.(false);
+    }, [disabled, onBusyChange]);
 
     const add = value => {
       const folder = value.trim();
@@ -171,8 +198,7 @@ function registerWorkspacesClient(ctx, React, store) {
       finally { pending.current = false; if (mounted.current) setBusy(false); }
     };
 
-    return h(Modal, { title: t(initial ? 'edit' : 'create'), busy: disabled, onClose },
-      h('form', { onSubmit: submit, className: 'hq-ws-grid' },
+    const form = h('form', { onSubmit: submit, className: 'hq-ws-grid' },
         h('label', { className: 'hq-ws-name' }, h('span', { className: 'hq-ws-name-icon' }, h(FolderIcon)),
           h('input', { value: title, autoFocus: true, maxLength: 200, required: true,
             placeholder: t('name'), 'aria-label': t('name'), disabled,
@@ -197,13 +223,94 @@ function registerWorkspacesClient(ctx, React, store) {
         h('footer', { className: 'hq-ws-actions' },
           h('button', { type: 'button', className: 'hq-ws-cancel', disabled, onClick: onClose }, t('cancel')),
           h('button', { type: 'submit', className: 'hq-ws-primary', disabled: disabled || !title.trim() || !folders.length },
-            t(busy ? 'saving' : initial ? 'save' : 'create')))));
+            t(busy ? 'saving' : initial ? 'save' : 'create'))));
+    return embedded ? form : h(Modal, { title: t(initial ? 'edit' : 'create'), busy: disabled, onClose }, form);
   }
 
   function DirectoryFlow(props) {
     useLocale();
     if (!props.open || (store && !store.isEnabled('workspaces'))) return null;
     return h(Editor, { externalBusy: props.busy, onClose: props.onCancel, onSaved: value => props.onPicked(value.path) });
+  }
+
+  // List/read share the same authenticated Host operations as harness_qol_workspaces.
+  // Read again when selecting a row: do not save with a revision cached by the list.
+  function WorkspaceManager({ onClose }) {
+    const [selected, setSelected] = React.useState(null);
+    const [saved, setSaved] = React.useState(false);
+    const [busy, setBusy] = React.useState(false);
+    // Own the dialog here, not in each screen: switching list/loading/form must
+    // never close and reopen the top-layer dialog, backdrop or focus trap.
+    return h(Modal, { title: t(selected ? 'edit' : 'manage'), busy, onClose },
+      h('div', { className: 'hq-ws-body' }, selected ? h(WorkspaceEditorLoader, {
+        key: selected, workspaceId: selected, embedded: true, onBusyChange: setBusy,
+        onClose: () => setSelected(null),
+        onSaved: () => { setSelected(null); setSaved(true); },
+      }) : h(WorkspaceList, { saved, onSelect: id => { setSaved(false); setSelected(id); } })));
+  }
+
+  function useWorkspaceRequest(requestKey, request) {
+    const [attempt, setAttempt] = React.useState(0);
+    const [state, setState] = React.useState({ data: null, error: '', loading: true });
+    React.useEffect(() => {
+      const controller = new AbortController();
+      setState({ data: null, error: '', loading: true });
+      run(request, controller.signal).then(data => {
+        if (!controller.signal.aborted) setState({ data, error: '', loading: false });
+      }, error => {
+        if (!controller.signal.aborted) setState({ data: null, error: error.message, loading: false });
+      });
+      return () => controller.abort();
+    }, [requestKey, attempt]);
+    return { ...state, retry: () => setAttempt(value => value + 1) };
+  }
+
+  function RequestStatus({ loading, error, retry }) {
+    return h(React.Fragment, null,
+      loading && h('p', { className: 'hq-ws-hint', role: 'status' }, t('loading')),
+      error && h('div', { className: 'hq-ws-grid' },
+        h('p', { className: 'hq-ws-error', role: 'alert' }, error),
+        h('button', { type: 'button', onClick: retry }, t('retry'))));
+  }
+
+  function WorkspaceList({ onSelect, saved }) {
+    const result = useWorkspaceRequest('list', { action: 'list' });
+    const workspaces = result.data?.workspaces ?? [];
+    return h('div', { className: 'hq-ws-grid' },
+        h('p', { className: 'hq-ws-hint' }, t('chooseWorkspace')),
+        saved && h('p', { className: 'hq-ws-hint', role: 'status' }, t('saved')),
+        h(RequestStatus, result),
+        result.data && !workspaces.length && h('p', { className: 'hq-ws-hint', role: 'status' }, t('empty')),
+        h('ul', { className: 'hq-ws-list', 'aria-label': t('manage') }, workspaces.map(workspace =>
+          h('li', { key: workspace.id }, h('button', {
+            type: 'button', className: 'hq-ws-workspace', onClick: () => onSelect(workspace.id),
+            'aria-label': t('editWorkspaceMenu') + ' ' + workspace.title + ' — ' + workspace.path,
+          }, h(FolderIcon),
+          h('span', { className: 'hq-ws-workspace-copy' },
+            h('span', { className: 'hq-ws-workspace-title' }, workspace.title),
+            h('span', { className: 'hq-ws-workspace-path' }, workspace.path)),
+          h('span', { className: 'hq-ws-workspace-count' }, workspace.folders.length + ' ' + t('folders')))))));
+  }
+
+  function WorkspaceEditorLoader({ workspaceId, onClose, onSaved, embedded = false, onBusyChange }) {
+    const result = useWorkspaceRequest(workspaceId, { action: 'read', workspaceId });
+    const [busy, setBusy] = React.useState(false);
+    const content = result.data ? h(Editor, {
+      key: workspaceId, initial: result.data, onClose, onSaved, embedded: true,
+      onBusyChange: embedded ? onBusyChange : setBusy,
+    }) : h(RequestStatus, result);
+    // Standalone session-menu entry also retains one Modal across loading.
+    return embedded ? content : h(Modal, { title: t('edit'), busy, onClose },
+      h('div', { className: 'hq-ws-body' }, content));
+  }
+
+  function WorkspacesButton({ wide }) {
+    useLocale();
+    return h(React.Fragment, null, h('style', null, css), h('button', {
+      type: 'button', className: 'hq-ws-launcher', 'data-wide': String(wide),
+      title: t('manage'), 'aria-label': t('manage'), 'aria-haspopup': 'dialog',
+      onClick: event => editorTarget.open({ manage: true, opener: event.currentTarget }),
+    }, h(FolderIcon), wide && h('span', null, t('manage'))));
   }
 
   function GlobalWorkspaceEditor() {
@@ -215,10 +322,16 @@ function registerWorkspacesClient(ctx, React, store) {
       return () => editorTarget.listeners.delete(cb);
     }, []);
     if (!target || (store && !store.isEnabled('workspaces'))) return null;
-    return h(Editor, {
-      initial: target.workspace,
-      onClose: () => { editorTarget.close(); target.onClose?.(); },
-      onSaved: value => { editorTarget.close(); target.onSaved?.(value); },
+    const close = () => {
+      editorTarget.close();
+      target.onClose?.();
+      if (target.opener?.isConnected) target.opener.focus();
+    };
+    if (target.manage) return h(WorkspaceManager, { onClose: close });
+    return h(WorkspaceEditorLoader, {
+      key: target.workspaceId, workspaceId: target.workspaceId,
+      onClose: close,
+      onSaved: value => { close(); target.onSaved?.(value); },
     });
   }
 
@@ -231,12 +344,9 @@ function registerWorkspacesClient(ctx, React, store) {
     if (!workspace) return null;
     return h('button', {
       type: 'button', role: 'menuitem', className: 'hq-ws-menu-item',
-      onClick: async () => {
+      onClick: () => {
         setMenuOpen?.(false);
-        try {
-          const full = await run({ action: 'read', workspaceId: workspace.id });
-          editorTarget.open({ workspace: full });
-        } catch (err) { console.error(err); }
+        editorTarget.open({ workspaceId: workspace.workspaceId });
       },
     }, h(FolderIcon), h('span', null, t('editWorkspaceMenu')));
   }
@@ -251,8 +361,12 @@ function registerWorkspacesClient(ctx, React, store) {
       const d4 = ctx.slots.inject('sidebar.workspaces.session.menu.item', () => ctx.slots.register({
         name: 'sidebar.workspaces.session.menu.item', id: 'harness-qol-edit-workspace', order: 250, label: () => t('editWorkspaceMenu'),
       }, SessionWorkspaceEditMenuItem));
-      disposers = [d1, d2, d3, d4];
+      const d5 = ctx.slots.inject('sidebar.footer.action', () => ctx.slots.register({
+        name: 'sidebar.footer.action', id: 'harness-qol-workspaces', order: 20, label: () => t('manage'),
+      }, WorkspacesButton));
+      disposers = [d1, d2, d3, d4, d5];
     } else if (!enabled && disposers.length > 0) {
+      editorTarget.close();
       for (const d of disposers.reverse()) d();
       disposers = [];
     }

@@ -151,6 +151,9 @@ test('client declares creation flows and session edit menu without importing pri
   const source = await readFile(new URL('./workspaces-client.js', import.meta.url), 'utf8');
   assert.match(source, /sidebar\.workspaces\.directoryFlow/); assert.match(source, /conversation\.hero\.workspace\.directoryFlow/);
   assert.match(source, /sidebar\.workspaces\.session\.menu\.item/); assert.match(source, /showModal\(\)/);
-  assert.doesNotMatch(source, /sidebar\.footer\.action/);
+  assert.match(source, /sidebar\.footer\.action/);
+  assert.match(source, /workspaceId: workspace\.workspaceId/);
+  assert.match(source, /useWorkspaceRequest\(workspaceId, \{ action: 'read', workspaceId \}\)/);
+  assert.match(source, /pointer-events:auto/);
   assert.doesNotMatch(source, /require\(|appendChild|createPortal|querySelector|#[a-fA-F\d]{3,8}\b/);
 });

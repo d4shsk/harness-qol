@@ -90,7 +90,7 @@ async function fixture({ initial, picker = async () => null, save = async () => 
     },
   };
   const register = vm.runInNewContext(`${source}\nregisterWorkspacesClient`, {
-    URL, console, window: { location: { href: 'http://localhost:32628/' } },
+    URL, console, AbortController, window: { location: { href: 'http://localhost:32628/' } },
     async fetch(url, options) {
       const request = JSON.parse(options.body);
       requests.push({ url: String(url), options, request });
@@ -103,25 +103,32 @@ async function fixture({ initial, picker = async () => null, save = async () => 
   if (initial) {
     const Menu = slots.get('sidebar.workspaces.session.menu.item');
     const menu = Menu({ sessionId: 'session-1', useWorkspaces: selector => selector({
-      workspaces: [{ id: initial.id, sessionIds: ['session-1'] }],
+      workspaces: [{ workspaceId: initial.id, sessionIds: ['session-1'] }],
     }) });
     await menu.props.onClick();
     const GlobalEditor = slots.get('shell.overlay');
     renderer.mount(() => GlobalEditor());
-    editor = renderer.tree;
+    const loader = renderer.tree;
+    renderer.unmount();
+    renderer.mount(() => loader.type(loader.props));
+    // Drain the read request and JSON decoding before entering the real Editor.
+    await new Promise(resolve => setImmediate(resolve));
+    // The loader retains its Modal; isolate its embedded Editor for form tests.
+    editor = renderer.tree.children[0].children[0];
     renderer.unmount();
   } else {
     const DirectoryFlow = slots.get('sidebar.workspaces.directoryFlow');
     editor = DirectoryFlow({ open: true, busy: externalBusy, onCancel: () => { closed++; }, onPicked: path => picked.push(path) });
   }
   // Keep the slot's callbacks while observing the actual saved workspace as well.
-  const props = { ...editor.props, onSaved(value) { saved.push(value); editor.props.onSaved(value); } };
+  const props = { ...editor.props, embedded: false, onBusyChange: undefined,
+    onSaved(value) { saved.push(value); editor.props.onSaved(value); } };
   renderer.mount(() => editor.type(props));
   const nodes = predicate => descendants(renderer.tree, predicate);
   const one = predicate => { const matches = nodes(predicate); assert.equal(matches.length, 1); return matches[0]; };
   const byClass = className => nodes(node => node.props.className === className);
   return {
-    renderer, requests, picked, saved,
+    renderer, requests, picked, saved, slots,
     get pickerCalls() { return pickerCalls; }, get closed() { return closed; },
     nodes, byClass,
     input: () => one(node => node.type === 'input'),
@@ -144,6 +151,52 @@ async function useFixture(t, options) {
 }
 
 const initial = { id: 'workspace-1', revision: 'revision-7', title: 'Existing', folders: ['C:\\primary', 'D:\\extra'] };
+
+test('manager keeps one unkeyed Modal across list, selection, cancel and save', async t => {
+  const f = await useFixture(t, { initial });
+  f.renderer.unmount();
+  const buttonTree = f.slots.get('sidebar.footer.action')({ wide: true });
+  descendants(buttonTree, node => node.type === 'button')[0].props.onClick({ currentTarget: null });
+  f.renderer.mount(() => f.slots.get('shell.overlay')());
+  const manager = f.renderer.tree;
+  f.renderer.unmount();
+  f.renderer.mount(() => manager.type(manager.props));
+  const modal = f.renderer.tree.type;
+  assert.equal(modal.name, 'Modal');
+  assert.equal(f.renderer.tree.props.key, undefined);
+  const screen = () => f.renderer.tree.children[0].children[0];
+  assert.equal(screen().type.name, 'WorkspaceList');
+  screen().props.onSelect(initial.id);
+  assert.equal(f.renderer.tree.type, modal);
+  assert.equal(f.renderer.tree.props.key, undefined);
+  assert.equal(screen().type.name, 'WorkspaceEditorLoader');
+  assert.equal(screen().props.embedded, true);
+  screen().props.onBusyChange(true);
+  assert.equal(f.renderer.tree.props.busy, true);
+  screen().props.onBusyChange(false);
+  screen().props.onClose();
+  assert.equal(f.renderer.tree.type, modal);
+  assert.equal(screen().type.name, 'WorkspaceList');
+  screen().props.onSelect(initial.id);
+  const loader = screen();
+  loader.props.onSaved();
+  assert.equal(f.renderer.tree.type, modal);
+  assert.equal(screen().props.saved, true);
+  f.renderer.unmount();
+
+  // Embedded loader swaps only content, not the native top-layer dialog.
+  f.renderer.mount(() => loader.type(loader.props));
+  assert.equal(f.renderer.tree.type.name, 'RequestStatus');
+  await new Promise(resolve => setImmediate(resolve));
+  const editor = f.renderer.tree;
+  assert.equal(editor.type.name, 'Editor');
+  assert.equal(editor.props.embedded, true);
+  f.renderer.unmount();
+  let busy;
+  f.renderer.mount(() => editor.type({ ...editor.props, onBusyChange: value => { busy = value; } }));
+  assert.equal(f.renderer.tree.type, 'form');
+  assert.equal(busy, false);
+});
 
 test('empty create UI has one name input and no manual path link, hint, badge, or folder row', async t => {
   const f = await useFixture(t);

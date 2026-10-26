@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-export const MODULE_IDS = Object.freeze(['workspaces', 'models', 'btw', 'quote', 'images']);
+export const MODULE_IDS = Object.freeze(['workspaces', 'models', 'btw', 'quote', 'images', 'console']);
 
 export const DEFAULT_MODULES = Object.freeze({
   workspaces: true,
@@ -11,6 +11,7 @@ export const DEFAULT_MODULES = Object.freeze({
   btw: true,
   quote: true,
   images: true,
+  console: true,
 });
 
 const SETTINGS_FILE = join(homedir(), '.dsh', 'harness-qol-settings.json');

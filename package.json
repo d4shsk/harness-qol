@@ -1,7 +1,7 @@
 {
   "name": "@local/harness-qol",
-  "version": "1.4.0",
-  "description": "Workspace, model, side-question, quoting, and image tools with module controls in Plugins.",
+  "version": "1.5.0",
+  "description": "Workspace, model, side-question, quoting, image tools and interactive background consoles with module controls in Plugins.",
   "dependencies": { "zod": "^4.1.12" },
   "private": true,
   "type": "module",
@@ -15,14 +15,14 @@
     "./locale/*.json": "./locale/*.json",
     "./icon": "./icon.svg"
   },
-  "files": ["index.js", "btw.js", "model-defaults.js", "workspaces.js", "workspaces-entry.js", "workspaces-locale/*.json", "workspaces-client.js", "client.js", "images-client.js", "models-client.js", "btw-client.js", "quote-client.js", "settings-client.js", "settings-state.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "*.test.mjs", "tests/*.test.mjs"],
+  "files": ["console.js", "console-client.js", "index.js", "btw.js", "model-defaults.js", "workspaces.js", "workspaces-entry.js", "workspaces-locale/*.json", "workspaces-client.js", "client.js", "images-client.js", "models-client.js", "btw-client.js", "quote-client.js", "settings-client.js", "settings-state.js", "build.mjs", "cordis.patch.yml", "locale/*.json", "icon.svg", "README.md", "*.test.mjs", "tests/*.test.mjs"],
   "scripts": { "build": "node build.mjs", "test": "node --test *.test.mjs tests/*.test.mjs" },
   "dsh": {
     "bundle": { "patch": "./cordis.patch.yml" },
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-attachment", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-workspace", "@deepseek-ai/dsh-client-ui-plugin-manager"]
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-attachment", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-workspace", "@deepseek-ai/dsh-client-ui-plugin-manager", "@deepseek-ai/dsh-api-job-controller"]
     }
   }
 }

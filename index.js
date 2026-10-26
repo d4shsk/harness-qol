@@ -1,4 +1,5 @@
 import { registerBtw } from './btw.js';
+import { registerConsole } from './console.js';
 import { registerModelDefaults } from './model-defaults.js';
 import { getSettingsState, registerSettingsHttp } from './settings-state.js';
 
@@ -9,6 +10,7 @@ export function apply(ctx) {
   ctx.inject(['webServer'], scope => {
     registerSettingsHttp(scope, state);
   });
+  ctx.inject(['jobs', 'subprocess', 'sandboxPolicy', 'sandbox', 'fs', 'workingDirectory'], scope => registerConsole(scope, state));
   registerBtw(ctx, state);
   registerModelDefaults(ctx, state);
 }
