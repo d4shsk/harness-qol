@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Harness-QOL",
-    "description": "Modular enable/disable toggles in Settings, multi-folder workspaces, right-click image copying, quote assistant responses, /btw side questions, and persistent default model settings."
+    "description": "Workspace, model, side-question, quoting, and image tools. Manage modules on this plugin page."
   }
 }

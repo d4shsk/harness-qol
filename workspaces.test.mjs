@@ -10,7 +10,7 @@ async function fixture(t) {
   const temp = await realpath(tmpdir());
   const root = await mkdtemp(join(temp, 'harness-qol-ws-test-'));
   // Only remove this exact owned temp directory, never a supplied project path.
-  assert.ok(resolve(root).startsWith(resolve(temp) + '/harness-qol-ws-test-'));
+  assert.ok(resolve(root).startsWith(join(resolve(temp), 'harness-qol-ws-test-')));
   t.after(() => rm(root, { recursive: true, force: true }));
   const a = join(root, 'one'); const b = join(root, 'two');
   await mkdir(a); await mkdir(b); await writeFile(join(a, 'keep.txt'), 'untouched');
@@ -52,7 +52,7 @@ test('edit native pre-QOL workspace, keeping its id, primary root and sessions',
   assert.equal(edited.id, native.id); assert.deepEqual(edited.folders, [f.a, f.b]); assert.deepEqual(native.sessionIds, ['chat-1']);
 });
 test('canonicalize and deduplicate symlink aliases', async t => {
-  const f = await fixture(t); const alias = join(f.root, 'alias'); await symlink(f.a, alias);
+  const f = await fixture(t); const alias = join(f.root, 'alias'); await symlink(f.a, alias, process.platform === 'win32' ? 'junction' : 'dir');
   const item = ok(await f.ops.run({ action: 'create', title: 'Roots', folders: [alias, f.a, f.b, f.b] }));
   assert.deepEqual(item.folders, [f.a, f.b]);
 });
@@ -115,7 +115,7 @@ test('cancelled operation commits nothing', async t => {
 test('context lists only this session workspace and updates without an agent restart', async t => {
   const f = await fixture(t); const item = ok(await f.ops.run({ action: 'create', title: 'One', folders: [f.a, f.b] }));
   const agent = { id: 'chat-1', session: { header: { cwd: f.a } } };
-  assert.match(f.ops.contextText(agent), new RegExp(f.b));
+  assert.ok(f.ops.contextText(agent).includes(JSON.stringify(f.b)));
   assert.equal(f.ops.contextText({ id: 'other', session: { header: { cwd: f.root } } }), '');
   await f.ops.run({ action: 'update', workspaceId: item.id, revision: item.revision, title: 'One', folders: [f.a] });
   assert.equal(f.ops.contextText(agent), '');

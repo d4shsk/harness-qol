@@ -1,7 +1,7 @@
 {
   "name": "@local/harness-qol",
-  "version": "1.3.0",
-  "description": "Harness-QOL: modular settings toggles, multi-folder workspaces, image context menus, quoting assistant replies, side questions, and model defaults.",
+  "version": "1.4.0",
+  "description": "Workspace, model, side-question, quoting, and image tools with module controls in Plugins.",
   "dependencies": { "zod": "^4.1.12" },
   "private": true,
   "type": "module",
@@ -22,7 +22,7 @@
     "client": {
       "platform": "web",
       "immediately": true,
-      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-attachment", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-workspace"]
+      "inject": ["@deepseek-ai/dsh-client-ui-conversation", "@deepseek-ai/dsh-client-ui-attachment", "@deepseek-ai/dsh-client-ui-settings", "@deepseek-ai/dsh-client-ui-workspace", "@deepseek-ai/dsh-client-ui-plugin-manager"]
     }
   }
 }

@@ -3,8 +3,8 @@ window.__ModuleLoader__.load({
   id: '@local/harness-qol',
   factory(require) {
     const React = require('react');
-// Harness-QOL Settings & Module Management Client
-// Concatenate inside the Client ModuleLoader factory, then call registerSettingsClient(ctx, React, t, store).
+// Harness-QOL module controls, rendered on the bundle's Plugins detail page.
+// Concatenate inside the Client ModuleLoader factory.
 
 function createModulesStore() {
   const DEFAULT_MODULES = {
@@ -115,316 +115,110 @@ function createModulesStore() {
 
 const qolModulesStore = createModulesStore();
 
+// Feature names and descriptions intentionally stay in English in every UI locale.
+const qolModuleInfo = [
+  { id: 'workspaces', title: 'Multi-folder Workspaces', description: 'Create and edit workspaces with multiple source folders.' },
+  { id: 'models', title: 'Default Model', description: 'Keep a default model for new chats, independent of session changes.' },
+  { id: 'btw', title: 'Side Questions (/btw)', description: 'Ask a read-only side question without interrupting the active task.' },
+  { id: 'quote', title: 'Reply Quoting', description: 'Quote selected assistant text in your next message.' },
+  { id: 'images', title: 'Image Preview & Copy', description: 'Preview full-size images and copy them to the clipboard.' },
+];
+
 function registerSettingsClient(ctx, React, t, store = qolModulesStore) {
   const h = React.createElement;
   const ns = 'harness-qol-settings';
-
   const dictionaries = {
     en: {
-      tabTitle: 'Harness QOL',
-      title: 'Harness QOL Settings',
-      subtitle: 'Manage modules and quality-of-life enhancements. You can toggle each module individually without restarting.',
-      enabledCount: '{count} of {total} modules enabled',
-      enableAll: 'Enable all',
-      disableAll: 'Disable all',
-      statusEnabled: 'Enabled',
-      statusDisabled: 'Disabled',
-      saveHint: 'Changes take effect immediately across all sessions.',
-      modules: {
-        workspaces: {
-          title: 'Multi-folder Workspaces',
-          desc: 'Create and edit workspaces with multiple source folders (up to 32 roots). Provides native folder selection, session context menu "Edit workspace…", and agent dynamic context.',
-        },
-        models: {
-          title: 'Default Model & Session Protection',
-          desc: 'Persistent default model for new chats in Settings → Models. Protects global default from being overwritten when changing models inside an individual chat session.',
-        },
-        btw: {
-          title: 'Side Questions (/btw)',
-          desc: 'Quick read-only questions to the model with /btw command without interrupting the active agent turn, polluting chat context, or triggering subagents.',
-        },
-        quote: {
-          title: 'Quote Assistant Replies',
-          desc: 'Context menu "Quote" when selecting assistant message text (right-click or Shift+F10) with a floating quote dock above prompt input and markdown blockquote insertion.',
-        },
-        images: {
-          title: 'Image Viewer & Copying',
-          desc: 'Full-resolution image preview lightbox and right-click context menu "Copy image" to copy PNG pixels directly into the clipboard.',
-        },
-      },
+      title: 'Modules',
+      enabledCount: '{count} of {total} enabled',
+      enableAll: 'Enable all', disableAll: 'Disable all',
+      statusEnabled: 'Enabled', statusDisabled: 'Disabled',
+      saveHint: 'Changes are saved automatically. Model defaults can be configured in Settings → Models.',
     },
     ru: {
-      tabTitle: 'Harness QOL',
-      title: 'Настройки Harness QOL',
-      subtitle: 'Управление модулями и улучшениями плагина. Вы можете включать и выключать отдельные модули по необходимости.',
-      enabledCount: 'Включено {count} из {total} модулей',
-      enableAll: 'Включить все',
-      disableAll: 'Выключить все',
-      statusEnabled: 'Включён',
-      statusDisabled: 'Отключён',
-      saveHint: 'Изменения применяются мгновенно и действуют для всех сессий.',
-      modules: {
-        workspaces: {
-          title: 'Мультипапочные воркспейсы',
-          desc: 'Создание и редактирование воркспейсов с несколькими папками (до 32 папок). Добавляет системный выбор папок, пункт «Редактировать workspace…» в меню сессии и контекст для агента.',
-        },
-        models: {
-          title: 'Модель по умолчанию и изоляция сессий',
-          desc: 'Настройка постоянной модели по умолчанию для новых сессий в Настройки → Модели. Защищает глобальную модель от перезаписи при смене модели внутри отдельного чата.',
-        },
-        btw: {
-          title: 'Фоновые вопросы (/btw)',
-          desc: 'Быстрые изолированные вопросы к модели по текущему чату командой /btw без прерывания основной задачи, без засорения контекста агента и без лишних шагов.',
-        },
-        quote: {
-          title: 'Цитирование ответов ассистента',
-          desc: 'Контекстное меню «Цитировать» при выделении текста ответа (ПКМ или Shift+F10), карточка цитаты над полем ввода и автоматическая вставка цитаты в промпт.',
-        },
-        images: {
-          title: 'Просмотр и копирование изображений',
-          desc: 'Полноэкранный просмотрщик (Lightbox) и пункт контекстного меню «Копировать изображение» для копирования в буфер обмена реальных пикселей PNG в полном разрешении.',
-        },
-      },
+      title: 'Модули',
+      enabledCount: 'Включено {count} из {total}',
+      enableAll: 'Включить все', disableAll: 'Выключить все',
+      statusEnabled: 'Включён', statusDisabled: 'Отключён',
+      saveHint: 'Изменения сохраняются автоматически. Модель по умолчанию настраивается в Настройки → Модели.',
     },
   };
-
   for (const [language, dictionary] of Object.entries(dictionaries)) {
     ctx.effect(() => ctx.locale.register(ns, language, dictionary));
   }
   const st = ctx.locale.bind(ns);
-
   const css = `
-.hq-set-wrap{box-sizing:border-box;width:100%;max-width:820px;padding:0 0 36px;color:var(--dsw-alias-label-primary,#1f1e1b);font-family:inherit}
-.hq-set-wrap *,.hq-set-wrap *::before,.hq-set-wrap *::after{box-sizing:border-box}
-.hq-set-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;margin-bottom:20px;flex-wrap:wrap}
-.hq-set-header-text{flex:1;min-width:240px}
-.hq-set-title{margin:0 0 6px 0;font-size:22px;font-weight:700;letter-spacing:-.3px;color:inherit;display:flex;align-items:center;gap:10px}
-.hq-set-subtitle{margin:0;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-secondary,#6c675d)}
-.hq-set-toolbar{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:18px;padding:12px 16px;border:1px solid var(--dsw-alias-border-l1,#e7e3d8);border-radius:12px;background:var(--dsw-alias-bg-layer-1,#fff);flex-wrap:wrap}
-.hq-set-counter{display:inline-flex;align-items:center;gap:8px;font-size:13px;font-weight:600;color:var(--dsw-alias-label-primary,#1f1e1b)}
-.hq-set-dot{width:8px;height:8px;border-radius:50%;background:var(--dsw-alias-state-success-primary,#10b981);display:inline-block}
-.hq-set-dot-partial{background:var(--dsw-alias-brand-primary,#3b82f6)}
-.hq-set-actions{display:flex;align-items:center;gap:8px}
-.hq-set-btn{display:inline-flex;align-items:center;justify-content:center;padding:6px 12px;font:inherit;font-size:12px;font-weight:500;border:1px solid var(--dsw-alias-border-l2,#d7d1c3);border-radius:8px;background:var(--dsw-alias-bg-layer-2,#f6f3ec);color:inherit;cursor:pointer;transition:background .12s,border-color .12s}
-.hq-set-btn:hover{background:var(--dsw-alias-bg-layer-1,#fff);border-color:var(--dsw-alias-brand-primary,#3b82f6)}
-.hq-set-btn:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#3b82f6);outline-offset:2px}
-.hq-set-list{display:grid;gap:12px}
-.hq-set-card{display:flex;flex-direction:column;gap:10px;padding:16px 18px;border:1px solid var(--dsw-alias-border-l1,#e7e3d8);border-radius:14px;background:var(--dsw-alias-bg-layer-1,#fff);transition:border-color .15s,box-shadow .15s}
-.hq-set-card:hover{border-color:var(--dsw-alias-border-l2,#d7d1c3);box-shadow:0 2px 10px color-mix(in srgb,var(--dsw-alias-bg-base,#000) 4%,transparent)}
-.hq-set-card[data-enabled="false"]{opacity:.72;background:var(--dsw-alias-bg-layer-2,#f6f3ec)}
-.hq-set-card-top{display:flex;align-items:center;justify-content:space-between;gap:14px}
-.hq-set-card-lead{display:flex;align-items:center;gap:12px;min-width:0;flex:1}
-.hq-set-card-icon{display:flex;align-items:center;justify-content:center;width:40px;height:40px;border-radius:10px;flex:none}
-.hq-set-card-title-wrap{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0}
-.hq-set-card-title{font-size:15px;font-weight:600;margin:0;color:inherit}
-.hq-set-badge{display:inline-flex;align-items:center;padding:2px 8px;font-size:11px;font-weight:600;border-radius:99px;line-height:1.4}
-.hq-set-badge[data-status="on"]{background:color-mix(in srgb,var(--dsw-alias-state-success-primary,#10b981) 15%,transparent);color:var(--dsw-alias-state-success-primary,#059669)}
-.hq-set-badge[data-status="off"]{background:color-mix(in srgb,var(--dsw-alias-label-secondary,#6c675d) 15%,transparent);color:var(--dsw-alias-label-secondary,#6c675d)}
-.hq-set-card-desc{margin:0;font-size:13px;line-height:1.55;color:var(--dsw-alias-label-secondary,#6c675d);padding-left:52px}
-@media(max-width:540px){.hq-set-card-desc{padding-left:0}}
-.hq-set-switch{position:relative;display:inline-flex;align-items:center;width:42px;height:24px;border-radius:999px;border:1px solid transparent;padding:2px;cursor:pointer;transition:background-color .2s,border-color .2s;outline:none;background-color:var(--dsw-alias-border-l2,#d7d1c3);flex:none}
-.hq-set-switch[aria-checked="true"]{background-color:var(--dsw-alias-brand-primary,#3b82f6)}
-.hq-set-switch:focus-visible{outline:2px solid var(--dsw-alias-brand-primary,#3b82f6);outline-offset:2px}
-.hq-set-switch-thumb{display:inline-block;width:18px;height:18px;border-radius:50%;background-color:#fff;box-shadow:0 1px 3px rgba(0,0,0,0.25);transition:transform .2s cubic-bezier(0.4,0,0.2,1)}
-.hq-set-switch[aria-checked="true"] .hq-set-switch-thumb{transform:translateX(18px)}
-.hq-set-switch[aria-checked="false"] .hq-set-switch-thumb{transform:translateX(0)}
-.hq-set-footer{margin-top:20px;font-size:12px;color:var(--dsw-alias-label-secondary,#6c675d);text-align:center}
+.hq-set-wrap{box-sizing:border-box;width:100%;min-width:0;color:var(--dsw-alias-label-primary);font-family:inherit}
+.hq-set-wrap *{box-sizing:border-box}
+.hq-set-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.hq-set-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap}
+.hq-set-title{margin:0;font-size:16px;font-weight:600;line-height:24px}
+.hq-set-counter,.hq-set-footer{color:var(--dsw-alias-label-secondary);font-size:12px;line-height:18px}
+.hq-set-counter{font-variant-numeric:tabular-nums}
+.hq-set-actions{display:flex;gap:8px;flex-wrap:wrap}
+.hq-set-btn{padding:5px 10px;border:1px solid var(--dsw-alias-border-l2);border-radius:8px;background:transparent;color:inherit;font:inherit;font-size:12px;cursor:pointer}
+.hq-set-btn:hover:not(:disabled){background:var(--dsw-alias-interactive-bg-hover)}
+.hq-set-btn:disabled{opacity:.4;cursor:default}
+.hq-set-list{border-top:1px solid var(--dsw-alias-border-l2)}
+.hq-set-row{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:14px 0;border-bottom:1px solid var(--dsw-alias-border-l2)}
+.hq-set-copy{min-width:0}
+.hq-set-name{margin:0;font-size:14px;line-height:22px;font-weight:500;overflow-wrap:anywhere}
+.hq-set-desc{margin:3px 0 0;font-size:13px;line-height:20px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere}
+.hq-set-row[data-enabled=false] .hq-set-name{color:var(--dsw-alias-label-secondary)}
+.hq-set-switch{display:inline-flex;align-items:center;flex:none;width:38px;height:22px;padding:2px;border:0;border-radius:999px;background:var(--dsw-alias-border-l2);cursor:pointer;transition:background .15s}
+.hq-set-switch[aria-checked=true]{background:var(--dsw-alias-label-primary)}
+.hq-set-thumb{width:18px;height:18px;border-radius:50%;background:var(--dsw-alias-bg-base);transition:transform .15s}
+.hq-set-switch[aria-checked=true] .hq-set-thumb{transform:translateX(16px)}
+.hq-set-btn:focus-visible,.hq-set-switch:focus-visible{outline:2px solid var(--dsw-focus-ring-color,var(--dsw-alias-state-business-primary));outline-offset:3px}
+.hq-set-footer{margin:12px 0 0}
+@media(prefers-reduced-motion:reduce){.hq-set-switch,.hq-set-thumb{transition:none}}
 `;
 
-  const tagId = 'harness-qol-settings-style';
-  if (typeof document !== 'undefined' && !document.getElementById(tagId)) {
-    const style = document.createElement('style');
-    style.id = tagId;
-    style.textContent = css;
-    document.head.appendChild(style);
-  }
-
-  // Icons for each module
-  const Icons = {
-    workspaces: () => h('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
-      h('path', { d: 'M3 7v10a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-6l-2-2H5a2 2 0 0 0-2 2z' })),
-    models: () => h('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
-      h('path', { d: 'M12 2a4 4 0 0 1 4 4c0 1.5-.8 2.8-2 3.5V11h-4V9.5C8.8 8.8 8 7.5 8 6a4 4 0 0 1 4-4z' }),
-      h('rect', { x: 4, y: 11, width: 16, height: 11, rx: 2 }),
-      h('circle', { cx: 9, cy: 16, r: 1.5 }),
-      h('circle', { cx: 15, cy: 16, r: 1.5 })),
-    btw: () => h('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
-      h('path', { d: 'M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z' }),
-      h('path', { d: 'M12 8v4m0 4h.01' })),
-    quote: () => h('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'currentColor', 'aria-hidden': true },
-      h('path', { d: 'M6 17h3l2-4V7H5v6h3zm8 0h3l2-4V7h-6v6h3z' })),
-    images: () => h('svg', { width: 22, height: 22, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 2, 'aria-hidden': true },
-      h('rect', { x: 3, y: 3, width: 18, height: 18, rx: 3 }),
-      h('circle', { cx: 8.5, cy: 8.5, r: 1.5 }),
-      h('polyline', { points: '21 15 16 10 5 21' })),
-  };
-
-  const Colors = {
-    workspaces: { bg: 'color-mix(in srgb, #3b82f6 14%, transparent)', fg: '#2563eb' },
-    models: { bg: 'color-mix(in srgb, #8b5cf6 14%, transparent)', fg: '#7c3aed' },
-    btw: { bg: 'color-mix(in srgb, #10b981 14%, transparent)', fg: '#059669' },
-    quote: { bg: 'color-mix(in srgb, #f59e0b 14%, transparent)', fg: '#d97706' },
-    images: { bg: 'color-mix(in srgb, #ec4899 14%, transparent)', fg: '#db2777' },
-  };
-
-  function Switch({ checked, onChange, title, id }) {
-    return h('button', {
-      type: 'button',
-      role: 'switch',
-      id,
-      'aria-checked': checked,
-      className: 'hq-set-switch',
-      title,
-      onClick: (e) => {
-        e.stopPropagation();
-        onChange(!checked);
-      },
-    }, h('span', { className: 'hq-set-switch-thumb' }));
-  }
-
-  function ModuleCard({ id, enabled, onToggle }) {
-    const title = st(`modules.${id}.title`);
-    const desc = st(`modules.${id}.desc`);
-    const iconFn = Icons[id] || Icons.workspaces;
-    const color = Colors[id] || Colors.workspaces;
-
-    return h('div', { className: 'hq-set-card', 'data-enabled': String(enabled) },
-      h('div', { className: 'hq-set-card-top' },
-        h('div', { className: 'hq-set-card-lead' },
-          h('div', {
-            className: 'hq-set-card-icon',
-            style: { background: color.bg, color: color.fg },
-          }, h(iconFn, null)),
-          h('div', { className: 'hq-set-card-title-wrap' },
-            h('h4', { className: 'hq-set-card-title' }, title),
-            h('span', {
-              className: 'hq-set-badge',
-              'data-status': enabled ? 'on' : 'off',
-            }, st(enabled ? 'statusEnabled' : 'statusDisabled'))
-          )
-        ),
-        h(Switch, {
-          checked: enabled,
-          id: `hq-switch-${id}`,
-          title: `${title}: ${st(enabled ? 'statusEnabled' : 'statusDisabled')}`,
-          onChange: onToggle,
-        })
-      ),
-      h('p', { className: 'hq-set-card-desc' }, desc)
-    );
-  }
-
-  function HarnessQolSettingsView() {
-    React.useSyncExternalStore(
-      callback => ctx.locale.subscribe(callback),
-      () => ctx.locale.getSnapshot()
-    );
-
+  function HarnessQolModulesView() {
+    React.useSyncExternalStore(callback => ctx.locale.subscribe(callback), () => ctx.locale.getSnapshot());
     const [modules, setModules] = React.useState(() => store.get());
-
     React.useEffect(() => {
+      const unsubscribe = store.subscribe(next => setModules({ ...next }));
       setModules(store.get());
-      return store.subscribe(next => setModules({ ...next }));
+      // Reconcile persisted values whenever the plugin page is reopened.
+      store.sync();
+      return unsubscribe;
     }, []);
-
-    const moduleKeys = ['workspaces', 'models', 'btw', 'quote', 'images'];
-    const totalCount = moduleKeys.length;
-    const enabledCount = moduleKeys.filter(k => modules[k] !== false).length;
-
-    const countText = st('enabledCount')
-      .replace('{count}', String(enabledCount))
-      .replace('{total}', String(totalCount));
-
-    return h('div', { className: 'hq-set-wrap' },
+    const enabledCount = qolModuleInfo.filter(({ id }) => modules[id] !== false).length;
+    const countText = st('enabledCount').replace('{count}', String(enabledCount)).replace('{total}', String(qolModuleInfo.length));
+    return h('section', { className: 'hq-set-wrap', 'data-harness-qol-settings': true, 'aria-label': st('title') },
+      h('style', null, css),
       h('div', { className: 'hq-set-header' },
-        h('div', { className: 'hq-set-header-text' },
-          h('h2', { className: 'hq-set-title' }, st('title')),
-          h('p', { className: 'hq-set-subtitle' }, st('subtitle'))
-        )
-      ),
-      h('div', { className: 'hq-set-toolbar' },
-        h('div', { className: 'hq-set-counter' },
-          h('span', { className: enabledCount === totalCount ? 'hq-set-dot' : 'hq-set-dot hq-set-dot-partial' }),
-          h('span', null, countText)
-        ),
+        h('div', { className: 'hq-set-heading' },
+          h('h3', { className: 'hq-set-title' }, st('title')),
+          h('span', { className: 'hq-set-counter', role: 'status', 'aria-live': 'polite' }, countText)),
         h('div', { className: 'hq-set-actions' },
+          h('button', { type: 'button', className: 'hq-set-btn', disabled: enabledCount === qolModuleInfo.length, onClick: () => store.setAll(true) }, st('enableAll')),
+          h('button', { type: 'button', className: 'hq-set-btn', disabled: enabledCount === 0, onClick: () => store.setAll(false) }, st('disableAll')))),
+      h('div', { className: 'hq-set-list' }, qolModuleInfo.map(({ id, title, description }) => {
+        const enabled = modules[id] !== false;
+        const titleId = `hq-module-${id}-title`;
+        const descriptionId = `hq-module-${id}-description`;
+        return h('div', { key: id, className: 'hq-set-row', 'data-module': id, 'data-enabled': String(enabled) },
+          h('div', { className: 'hq-set-copy', lang: 'en' },
+            h('h4', { id: titleId, className: 'hq-set-name' }, title),
+            h('p', { id: descriptionId, className: 'hq-set-desc' }, description)),
           h('button', {
-            type: 'button',
-            className: 'hq-set-btn',
-            disabled: enabledCount === totalCount,
-            onClick: () => store.setAll(true),
-          }, st('enableAll')),
-          h('button', {
-            type: 'button',
-            className: 'hq-set-btn',
-            disabled: enabledCount === 0,
-            onClick: () => store.setAll(false),
-          }, st('disableAll'))
-        )
-      ),
-      h('div', { className: 'hq-set-list' },
-        moduleKeys.map(key => h(ModuleCard, {
-          key,
-          id: key,
-          enabled: modules[key] !== false,
-          onToggle: (nextVal) => store.setModule(key, nextVal),
-        }))
-      ),
-      h('p', { className: 'hq-set-footer' }, st('saveHint'))
-    );
+            type: 'button', role: 'switch', className: 'hq-set-switch',
+            'aria-checked': enabled, 'aria-labelledby': titleId, 'aria-describedby': descriptionId,
+            title: `${title}: ${st(enabled ? 'statusEnabled' : 'statusDisabled')}`,
+            onClick: () => store.setModule(id, !enabled),
+          }, h('span', { className: 'hq-set-thumb', 'aria-hidden': true })));
+      })),
+      h('p', { className: 'hq-set-footer' }, st('saveHint')));
   }
 
-  // Observer to patch Settings navigation button with Harness QOL SVG icon
-  const SVG_PATH = 'M16 18v28m19-28v28M16 32h19';
-  function patchNavIcon() {
-    if (typeof document === 'undefined') return;
-    const spans = document.querySelectorAll('span');
-    for (const span of spans) {
-      const text = (span.textContent || '').trim();
-      if (text === 'Harness QOL' || text === 'Harness-QOL') {
-        const btn = span.closest('button');
-        if (btn) {
-          const svg = btn.querySelector('svg');
-          if (svg) {
-            svg.setAttribute('viewBox', '0 0 64 64');
-            svg.setAttribute('width', '16');
-            svg.setAttribute('height', '16');
-            svg.setAttribute('fill', 'none');
-            const path = svg.querySelector('path');
-            if (!path || path.getAttribute('d') !== SVG_PATH) {
-              svg.innerHTML = `
-                <rect x="3" y="3" width="58" height="58" rx="15" fill="#4868dc"/>
-                <path d="${SVG_PATH}" stroke="#fff" stroke-width="5" stroke-linecap="round"/>
-                <path d="m46 13 2.2 7.8L56 23l-7.8 2.2L46 33l-2.2-7.8L36 23l7.8-2.2Z" fill="#f2d676"/>
-                <path d="m43 40 4 4 8-10" fill="none" stroke="#b9f6d1" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
-              `;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  function initNavObserver() {
-    if (typeof window === 'undefined') return;
-    patchNavIcon();
-    if (window.__harnessQolNavObserver) return;
-    const observer = new MutationObserver(patchNavIcon);
-    observer.observe(document.documentElement || document.body, { childList: true, subtree: true });
-    window.addEventListener('click', patchNavIcon, true);
-    window.setInterval(patchNavIcon, 400);
-    window.__harnessQolNavObserver = observer;
-  }
-
-  initNavObserver();
-
-  // Register settings section
-  ctx.slots.inject('settings.section', () => ctx.slots.register({
-    name: 'settings.section',
-    id: 'harness-qol',
-    order: 15,
-    label: () => st('tabTitle'),
-  }, (props) => h(HarnessQolSettingsView, { ...props, ctx })));
+  // Public, package-keyed slot: visible only on Plugins → Harness-QOL.
+  // No Settings navigation entry, DOM observer, or polling timer is needed.
+  ctx.slots.inject('plugins.bundle.config', () => ctx.slots.register({
+    name: 'plugins.bundle.config',
+    key: '@local/harness-qol',
+  }, HarnessQolModulesView));
 }
 
 /* Harness-QOL image presentation. Concatenate inside the Client ModuleLoader factory.
@@ -1597,25 +1391,23 @@ function registerWorkspacesClient(ctx, React, store) {
     en: {
       manage: 'Workspaces', create: 'Create workspace', edit: 'Edit workspace', name: 'Workspace name',
       roots: 'Source folders', add: 'Add folder', remove: 'Remove folder', primary: 'Primary',
-      source: 'Add a folder on this computer', chooseFolder: 'Choose folder…', manualLink: 'or enter path manually',
-      path: 'Absolute folder path', cancel: 'Cancel', save: 'Save changes', saving: 'Saving…', close: 'Close',
-      hint: 'The first folder is the primary workspace directory. Other folders are added as reference contexts for the AI agent.',
+      source: 'This computer',
+      cancel: 'Cancel', save: 'Save changes', saving: 'Saving…', close: 'Close',
       primaryHint: 'The primary folder stays fixed to preserve existing chats.', loading: 'Loading…', retry: 'Retry',
       folders: 'folders', editWorkspaceMenu: 'Edit workspace…',
       duplicate: 'This folder is already in the list.',
-      nativeFailed: 'Native picker unavailable. Enter an absolute path below.',
+      nativeFailed: 'Could not open the folder picker. Please try again.',
       unavailable: 'Workspace service unavailable. Restart Harness after updating the plugin.',
     },
     ru: {
       manage: 'Workspaces', create: 'Создать workspace', edit: 'Редактировать workspace', name: 'Название workspace',
       roots: 'Исходные папки', add: 'Добавить папку', remove: 'Убрать папку', primary: 'Основная',
-      source: 'Добавить папку на этом компьютере', chooseFolder: 'Выбрать папку…', manualLink: 'или указать путь вручную',
-      path: 'Абсолютный путь к папке', cancel: 'Отменить', save: 'Сохранить изменения', saving: 'Сохранение…', close: 'Закрыть',
-      hint: 'Первая папка является основной рабочей директорией. Остальные папки добавляются как контекст для AI-агента.',
+      source: 'Этот компьютер',
+      cancel: 'Отменить', save: 'Сохранить изменения', saving: 'Сохранение…', close: 'Закрыть',
       primaryHint: 'Основная папка закреплена для совместимости с существующими чатами.', loading: 'Загрузка…', retry: 'Повторить',
       folders: 'папок', editWorkspaceMenu: 'Редактировать workspace…',
       duplicate: 'Эта папка уже добавлена.',
-      nativeFailed: 'Системный выбор недоступен. Укажите абсолютный путь ниже.',
+      nativeFailed: 'Не удалось открыть выбор папки. Попробуйте ещё раз.',
       unavailable: 'Сервис workspace недоступен. Перезапустите Harness после обновления плагина.',
     },
   };
@@ -1648,37 +1440,35 @@ function registerWorkspacesClient(ctx, React, store) {
   }
 
   const css = `
-.hq-ws-dialog{box-sizing:border-box;width:min(580px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:24px;border:1px solid var(--dsw-alias-border-l1);border-radius:16px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;overflow:auto;box-shadow:0 16px 48px rgba(0,0,0,0.2)}
+.hq-ws-dialog{box-sizing:border-box;width:min(580px,calc(100vw - 32px));max-height:calc(100dvh - 48px);padding:22px;border:1px solid var(--dsw-alias-border-l1);border-radius:20px;background:var(--dsw-alias-bg-layer-1);color:var(--dsw-alias-label-primary);font:inherit;overflow:auto;box-shadow:0 16px 48px rgba(0,0,0,0.2)}
 .hq-ws-dialog::backdrop{background:color-mix(in srgb,var(--dsw-alias-bg-base) 72%,transparent)}
-.hq-ws-dialog *{box-sizing:border-box}.hq-ws-dialog h2{margin:0;font-size:20px;font-weight:600}.hq-ws-dialog h3{margin:0 0 8px 0;font-size:14px;font-weight:600}
-.hq-ws-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:20px}
-.hq-ws-grid{display:grid;gap:14px}
+.hq-ws-dialog *{box-sizing:border-box}.hq-ws-dialog h2{margin:0;font-size:20px;font-weight:600}.hq-ws-dialog h3{margin:0;font-size:14px;font-weight:600}
+.hq-ws-header{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+.hq-ws-grid{display:grid;gap:16px;min-width:0}
+.hq-ws-sources{display:grid;gap:10px;min-width:0}
+.hq-ws-sources-header{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.hq-ws-source{display:inline-flex;align-items:center;gap:8px;font-size:13px;color:var(--dsw-alias-label-secondary)}
 .hq-ws-dialog button{font:inherit;cursor:pointer;color:inherit;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);padding:8px 16px}
 .hq-ws-dialog button:hover{border-color:var(--dsw-alias-border-l2)}.hq-ws-dialog button:disabled{opacity:.45;cursor:default}
 .hq-ws-dialog :focus-visible{outline:2px solid var(--dsw-alias-brand-primary);outline-offset:2px}
 .hq-ws-dialog .hq-ws-icon{border:0;background:none;padding:4px 8px;font-size:18px;color:var(--dsw-alias-label-secondary);display:inline-flex;align-items:center;justify-content:center;flex:none;border-radius:6px}
 .hq-ws-dialog .hq-ws-icon:hover{color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2)}
-.hq-ws-name{display:flex;align-items:center;gap:10px;border:1px solid var(--dsw-alias-border-l1);border-radius:10px;padding:10px 14px;background:var(--dsw-alias-bg-layer-1)}.hq-ws-name:focus-within{border-color:var(--dsw-alias-brand-primary)}
-.hq-ws-name input{border:0;background:none;padding:0;outline:none!important;font-size:15px;color:var(--dsw-alias-label-primary);width:100%}.hq-ws-name svg{flex:none;color:var(--dsw-alias-brand-primary)}
+.hq-ws-name{display:flex;align-items:center;min-height:44px;border:1px solid var(--dsw-alias-border-l1);border-radius:12px;background:var(--dsw-alias-bg-layer-1)}.hq-ws-name:focus-within{border-color:var(--dsw-alias-brand-primary)}
+.hq-ws-name-icon{display:flex;align-items:center;justify-content:center;align-self:stretch;width:44px;flex:none;border-right:1px solid var(--dsw-alias-border-l1)}
+.hq-ws-name input{font:inherit;border:0;background:none;padding:10px;outline:none!important;font-size:14px;color:var(--dsw-alias-label-primary);width:100%;min-width:0}.hq-ws-name svg{flex:none;color:var(--dsw-alias-brand-primary)}
 .hq-ws-roots{border:1px solid var(--dsw-alias-border-l1);border-radius:12px;overflow:hidden;background:var(--dsw-alias-bg-layer-1)}
-.hq-ws-add{display:flex;flex-direction:column;align-items:center;gap:10px;padding:24px 16px;color:var(--dsw-alias-label-secondary)}
-.hq-ws-btn-choose{display:inline-flex;align-items:center;gap:8px;padding:8px 18px;border:1px solid var(--dsw-alias-border-l1);border-radius:8px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-primary);font-size:13px;font-weight:500;cursor:pointer}
-.hq-ws-btn-choose:hover{border-color:var(--dsw-alias-border-l2)}
-.hq-ws-link{background:none!important;border:none!important;font-size:12px;color:var(--dsw-alias-label-secondary)!important;cursor:pointer;text-decoration:underline;padding:0!important}
-.hq-ws-link:hover{color:var(--dsw-alias-label-primary)!important}
-.hq-ws-folder{display:flex;gap:12px;align-items:center;padding:12px 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}
+.hq-ws-dialog .hq-ws-add{display:flex;align-items:center;gap:10px;width:100%;min-height:52px;padding:14px 16px;border:0;border-radius:0;background:none;color:var(--dsw-alias-label-primary);font-size:14px;text-align:left}
+.hq-ws-dialog .hq-ws-add:hover{background:var(--dsw-alias-bg-layer-2)}
+.hq-ws-dialog .hq-ws-add:focus-visible{outline-offset:-3px}
+.hq-ws-add svg{flex:none;color:var(--dsw-alias-brand-primary)}
+.hq-ws-folder{display:flex;gap:10px;align-items:center;min-height:52px;padding:10px 14px 10px 16px;border-bottom:1px solid var(--dsw-alias-border-l1)}
 .hq-ws-folder svg{flex:none;color:var(--dsw-alias-brand-primary)}
-.hq-ws-folder-text{min-width:0;flex:1}
-.hq-ws-folder-name{font-size:14px;font-weight:600;display:flex;align-items:center;overflow-wrap:anywhere}
-.hq-ws-path{font-size:12px;color:var(--dsw-alias-label-secondary);overflow-wrap:anywhere;margin-top:2px}
-.hq-ws-badge{font-size:11px;font-weight:500;margin-left:8px;padding:2px 7px;border-radius:6px;background:var(--dsw-alias-bg-layer-2);color:var(--dsw-alias-label-secondary)}
-.hq-ws-hint{font-size:12px;line-height:1.5;color:var(--dsw-alias-label-secondary);margin:0}
-.hq-ws-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:20px;flex-wrap:wrap}
+.hq-ws-folder-name{min-width:0;flex:1;font-size:14px;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hq-ws-actions{display:flex;justify-content:flex-end;gap:12px;margin-top:20px;flex-wrap:wrap}
+.hq-ws-actions button{min-height:36px;padding:8px 18px}
 .hq-ws-dialog .hq-ws-primary{background:var(--dsw-alias-label-primary);color:var(--dsw-alias-bg-base);border:0;font-weight:500}
-.hq-ws-dialog .hq-ws-cancel{background:transparent}
+.hq-ws-dialog .hq-ws-cancel{background:transparent;border-color:transparent}
 .hq-ws-error{color:var(--dsw-alias-state-error-primary);font-size:13px;white-space:pre-wrap;overflow-wrap:anywhere;margin:0}
-.hq-ws-inline{display:flex;gap:8px;align-items:center;width:100%}
-.hq-ws-inline input{font:inherit;min-width:0;color:var(--dsw-alias-label-primary);background:var(--dsw-alias-bg-layer-2);border:1px solid var(--dsw-alias-border-l1);border-radius:8px;padding:8px 12px;width:100%}
 .hq-ws-menu-item{display:flex;align-items:center;gap:8px;width:100%;padding:8px 12px;font:inherit;font-size:13px;color:var(--dsw-alias-label-primary);background:transparent;border:0;border-radius:6px;cursor:pointer;text-align:left}
 .hq-ws-menu-item:hover{background:var(--dsw-alias-bg-layer-2)}
 .hq-ws-menu-item svg{flex:none;color:var(--dsw-alias-label-secondary)}
@@ -1689,6 +1479,12 @@ function registerWorkspacesClient(ctx, React, store) {
     return h('svg', { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.8, 'aria-hidden': true },
       h('path', { d: 'M3 8V6a2 2 0 0 1 2-2h4l3 3h7a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8h18' }),
       plus && h('path', { d: 'M12 11v7m-3.5-3.5h7' }));
+  }
+
+  function ComputerIcon() {
+    return h('svg', { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', stroke: 'currentColor', strokeWidth: 1.5, 'aria-hidden': true },
+      h('rect', { x: 4, y: 3, width: 16, height: 13, rx: 2 }),
+      h('path', { d: 'M4 16 2 19v1h20v-1l-2-3M9 20h6' }));
   }
 
   function Modal({ title, children, onClose, busy }) {
@@ -1711,8 +1507,6 @@ function registerWorkspacesClient(ctx, React, store) {
   function Editor({ initial, onSaved, onClose, externalBusy = false }) {
     const [title, setTitle] = React.useState(initial?.title ?? '');
     const [folders, setFolders] = React.useState(initial?.folders ?? []);
-    const [path, setPath] = React.useState('');
-    const [showManual, setShowManual] = React.useState(false);
     const [busy, setBusy] = React.useState(false);
     const [picking, setPicking] = React.useState(false);
     const [error, setError] = React.useState('');
@@ -1734,7 +1528,7 @@ function registerWorkspacesClient(ctx, React, store) {
         }
         return next;
       });
-      setPath(''); setError(''); setShowManual(false);
+      setError('');
     };
 
     const choose = async () => {
@@ -1744,7 +1538,7 @@ function registerWorkspacesClient(ctx, React, store) {
         const value = await ctx.get('uiWorkspace').pickDirectory();
         if (mounted.current && value) add(value);
       } catch (failure) {
-        if (mounted.current) { setShowManual(true); setError(t('nativeFailed') + '\n' + failure.message); }
+        if (mounted.current) setError(t('nativeFailed') + '\n' + failure.message);
       } finally {
         pending.current = false;
         if (mounted.current) setPicking(false);
@@ -1764,33 +1558,26 @@ function registerWorkspacesClient(ctx, React, store) {
 
     return h(Modal, { title: t(initial ? 'edit' : 'create'), busy: disabled, onClose },
       h('form', { onSubmit: submit, className: 'hq-ws-grid' },
-        h('label', { className: 'hq-ws-name' }, h(FolderIcon),
+        h('label', { className: 'hq-ws-name' }, h('span', { className: 'hq-ws-name-icon' }, h(FolderIcon)),
           h('input', { value: title, autoFocus: true, maxLength: 200, required: true,
             placeholder: t('name'), 'aria-label': t('name'), disabled,
             onChange: event => setTitle(event.target.value) })),
-        h('h3', null, t('roots')),
-        h('div', { className: 'hq-ws-roots' },
-          ...folders.map((folder, index) => h('div', { key: folder, className: 'hq-ws-folder' },
-            h(FolderIcon),
-            h('div', { className: 'hq-ws-folder-text' },
-              h('div', { className: 'hq-ws-folder-name' }, folder.split(/[\\/]/).filter(Boolean).pop() || folder,
-                index === 0 && h('span', { className: 'hq-ws-badge' }, t('primary'))),
-              h('div', { className: 'hq-ws-path' }, folder)),
-            h('button', { type: 'button', className: 'hq-ws-icon', 'aria-label': t('remove') + ': ' + folder,
-              title: initial && index === 0 ? t('primaryHint') : t('remove'),
-              disabled: disabled || (!!initial && index === 0),
-              onClick: () => setFolders(previous => previous.filter(item => item !== folder)) }, '×'))),
-          h('div', { className: 'hq-ws-add' },
-            h('span', null, t('source')),
-            h('button', { type: 'button', className: 'hq-ws-btn-choose', disabled: disabled || folders.length >= 32, onClick: choose },
-              h(FolderIcon, { plus: true }), t(picking ? 'loading' : 'chooseFolder')),
-            !showManual && h('button', { type: 'button', className: 'hq-ws-link', onClick: () => setShowManual(true) }, t('manualLink')),
-            showManual && h('div', { className: 'hq-ws-inline' },
-              h('input', { value: path, 'aria-label': t('path'), placeholder: t('path'), disabled,
-                onKeyDown: event => { if (event.key === 'Enter') { event.preventDefault(); add(path); } },
-                onChange: event => setPath(event.target.value) }),
-              h('button', { type: 'button', disabled: disabled || !path.trim() || folders.length >= 32, onClick: () => add(path) }, t('add'))))),
-        h('p', { className: 'hq-ws-hint' }, t('hint'), initial && ' ' + t('primaryHint')),
+        h('section', { className: 'hq-ws-sources', 'aria-label': t('roots') },
+          h('div', { className: 'hq-ws-sources-header' },
+            h('h3', null, t('roots')),
+            h('span', { className: 'hq-ws-source' }, h(ComputerIcon), t('source'))),
+          h('div', { className: 'hq-ws-roots' },
+            ...folders.map((folder, index) => h('div', { key: folder, className: 'hq-ws-folder' },
+              h(FolderIcon),
+              h('span', { className: 'hq-ws-folder-name', title: folder,
+                'aria-label': folder + (index === 0 ? ' (' + t('primary') + ')' : '') },
+                folder.split(/[\\/]/).filter(Boolean).pop() || folder),
+              h('button', { type: 'button', className: 'hq-ws-icon', 'aria-label': t('remove') + ': ' + folder,
+                title: initial && index === 0 ? t('primaryHint') : t('remove'),
+                disabled: disabled || (!!initial && index === 0),
+                onClick: () => setFolders(previous => previous.filter(item => item !== folder)) }, '×'))),
+            h('button', { type: 'button', className: 'hq-ws-add', disabled: disabled || folders.length >= 32, onClick: choose },
+              h(FolderIcon, { plus: true }), t(picking ? 'loading' : 'add')))),
         error && h('p', { role: 'alert', className: 'hq-ws-error' }, error),
         h('footer', { className: 'hq-ws-actions' },
           h('button', { type: 'button', className: 'hq-ws-cancel', disabled, onClick: onClose }, t('cancel')),

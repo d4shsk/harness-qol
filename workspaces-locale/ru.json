@@ -1,6 +1,6 @@
 {
   "meta": {
-    "title": "Harness-QOL · Workspaces",
-    "description": "Создание и редактирование workspace с несколькими исходными папками без перемещения файлов и потери существующих чатов."
+    "title": "Multi-folder Workspaces",
+    "description": "Create and edit workspaces with multiple source folders."
   }
 }

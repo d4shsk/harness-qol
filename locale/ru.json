@@ -1,6 +1,6 @@
 {
   "meta": {
     "title": "Harness-QOL",
-    "description": "Включение и выключение отдельных модулей плагина в Настройках, workspace с несколькими папками, копирование картинок через ПКМ, цитирование ответов, фоновые вопросы /btw и модель по умолчанию."
+    "description": "Workspace, model, side-question, quoting, and image tools. Manage modules on this plugin page."
   }
 }
