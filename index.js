@@ -4,6 +4,7 @@ import { registerModelDefaults } from './model-defaults.js';
 import { registerMessageEditor } from './messages.js';
 import { registerInstructions } from './instructions.js';
 import { registerMcp } from './mcp.js';
+import { registerMcpHistoryRepair } from './mcp-history.js';
 import { registerWebSearch } from './web-search.js';
 import { getSettingsState, registerSettingsHttp, registerSettingsConnection } from './settings-state.js';
 
@@ -21,7 +22,8 @@ export async function apply(ctx) {
   registerModelDefaults(ctx, state);
   registerMessageEditor(ctx, state);
   registerInstructions(ctx, state);
-  registerMcp(ctx, state);
+  const historyRepair = registerMcpHistoryRepair(ctx);
+  registerMcp(ctx, state, undefined, historyRepair);
   registerWebSearch(ctx, state);
 }
 

@@ -53,6 +53,13 @@ function initMcpNavObserver() {
   };
 }
 
+function requestMcp(path, options = {}) {
+  // Desktop routes authenticated requests through its carrier, not native fetch.
+  const target = 'api' + path;
+  const transport = globalThis.__DSH_TRANSPORT__;
+  return transport?.fetch ? transport.fetch(target, options) : fetch(target, { credentials: 'same-origin', ...options });
+}
+
 function registerMcpClient(ctx, React, t, store = qolModulesStore) {
   const h = React.createElement;
 
@@ -150,194 +157,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
 .hq-mcp-empty{text-align:center;padding:32px 16px;color:var(--dsw-alias-label-secondary);font-size:13px}
 `;
 
-  function splitArgs(str) {
-    if (!str || typeof str !== 'string') return [];
-    const matches = [];
-    let current = '';
-    let inDouble = false;
-    let inSingle = false;
-    for (let i = 0; i < str.length; i++) {
-      const char = str[i];
-      if (char === '"' && !inSingle) inDouble = !inDouble;
-      else if (char === "'" && !inDouble) inSingle = !inSingle;
-      else if (/\s/.test(char) && !inDouble && !inSingle) {
-        if (current.length > 0) {
-          matches.push(current);
-          current = '';
-        }
-      } else current += char;
-    }
-    if (current.length > 0) matches.push(current);
-    return matches;
-  }
-
-  function smartParseClient(input) {
-    if (typeof input !== 'string') return null;
-    const raw = input.trim();
-    if (!raw) return null;
-
-    // 1. JSON
-    let jsonToParse = raw;
-    if (!jsonToParse.startsWith('{') && /^\s*"[\w-]+"\s*:\s*\{/.test(jsonToParse)) {
-      jsonToParse = '{' + jsonToParse + '}';
-    }
-    if (jsonToParse.startsWith('{')) {
-      try {
-        const parsed = JSON.parse(jsonToParse);
-        if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
-          const firstKey = Object.keys(parsed.mcpServers)[0];
-          if (firstKey) {
-            const cfg = parsed.mcpServers[firstKey];
-            return {
-              id: firstKey,
-              name: cfg.name || firstKey,
-              command: cfg.command || '',
-              args: Array.isArray(cfg.args) ? cfg.args : [],
-              env: cfg.env || {},
-              cwd: cfg.cwd || '',
-              url: cfg.url || '',
-              headers: cfg.headers || {},
-              transport: cfg.transport || (cfg.url ? 'streamable-http' : 'stdio'),
-              description: cfg.description || '',
-              type: 'JSON (mcpServers)',
-            };
-          }
-        }
-        if (parsed.command || parsed.url) {
-          const id = parsed.id || parsed.name || 'custom-mcp';
-          return {
-            id: id.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-            name: parsed.name || id,
-            command: parsed.command || '',
-            args: Array.isArray(parsed.args) ? parsed.args : [],
-            env: parsed.env || {},
-            cwd: parsed.cwd || '',
-            url: parsed.url || '',
-            headers: parsed.headers || {},
-            transport: parsed.transport || (parsed.url ? 'streamable-http' : 'stdio'),
-            description: parsed.description || '',
-            type: 'JSON (Config)',
-          };
-        }
-        const firstKey = Object.keys(parsed)[0];
-        if (firstKey && typeof parsed[firstKey] === 'object') {
-          const cfg = parsed[firstKey];
-          return {
-            id: firstKey,
-            name: cfg.name || firstKey,
-            command: cfg.command || '',
-            args: Array.isArray(cfg.args) ? cfg.args : [],
-            env: cfg.env || {},
-            cwd: cfg.cwd || '',
-            url: cfg.url || '',
-            headers: cfg.headers || {},
-            transport: cfg.transport || (cfg.url ? 'streamable-http' : 'stdio'),
-            description: cfg.description || '',
-            type: 'JSON',
-          };
-        }
-      } catch (_e) {}
-    }
-
-    // 2. GitHub Subtree (e.g. servers/tree/main/src/filesystem)
-    const ghSubMatch = raw.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/tree\/[^\/]+\/src\/([A-Za-z0-9_.-]+)/i);
-    if (ghSubMatch) {
-      const sub = ghSubMatch[3];
-      return {
-        id: sub.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-        name: `${sub} MCP`,
-        command: 'npx',
-        args: ['-y', `@modelcontextprotocol/server-${sub}`],
-        env: sub === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-        transport: 'stdio',
-        description: `Official ${sub} server from modelcontextprotocol repository`,
-        source: raw,
-        type: 'GitHub Subtree',
-      };
-    }
-
-    // 3. GitHub repository URL
-    const ghMatch = raw.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/i);
-    if (ghMatch) {
-      const owner = ghMatch[1];
-      const repo = ghMatch[2].replace(/\.git$/, '');
-      const cleanId = repo.replace(/^mcp-server-|^mcp-|-mcp$/gi, '') || repo;
-      return {
-        id: cleanId.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-        name: repo,
-        command: 'npx',
-        args: ['-y', repo],
-        env: {},
-        transport: 'stdio',
-        description: `MCP server from GitHub (${owner}/${repo})`,
-        source: `https://github.com/${owner}/${repo}`,
-        type: 'GitHub Repo',
-      };
-    }
-
-    // 4. HTTP / SSE URL endpoint
-    if (/^https?:\/\//i.test(raw)) {
-      try {
-        const url = new URL(raw);
-        const pathname = url.pathname.replace(/\/$/, '');
-        const lastPart = pathname.split('/').pop() || 'remote-mcp';
-        return {
-          id: lastPart.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-          name: `${url.hostname} MCP`,
-          url: raw,
-          transport: 'streamable-http',
-          headers: {},
-          description: `Remote MCP server: ${raw}`,
-          type: 'HTTP Endpoint',
-        };
-      } catch (_e) {}
-    }
-
-    // 5. CLI command string (e.g. npx, uvx, docker, node, python)
-    if (/^(npx|uvx|docker|node|python|python3)\b/i.test(raw)) {
-      const parts = splitArgs(raw);
-      const command = parts[0];
-      const args = parts.slice(1);
-      let guessedName = 'mcp-server';
-      for (const arg of args) {
-        if (!arg.startsWith('-') && !arg.includes('=') && (!arg.includes('/') || arg.startsWith('@')) && !arg.includes('\\')) {
-          guessedName = arg.replace(/^@[\w-]+\//, '');
-          break;
-        }
-      }
-      const cleanId = guessedName.replace(/^@[\w-]+\//, '').replace(/^mcp-server-|^mcp-|^server-|-mcp$/gi, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-      return {
-        id: cleanId || 'custom-mcp',
-        name: guessedName || command,
-        command,
-        args,
-        env: cleanId === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-        transport: 'stdio',
-        description: raw,
-        type: 'CLI Command',
-      };
-    }
-
-    // 6. Bare package name
-    if (/^(@[\w-]+\/)?[\w-]+$/.test(raw)) {
-      const isPython = /^mcp-server-/.test(raw);
-      const cmd = isPython ? 'uvx' : 'npx';
-      const pkgArgs = isPython ? [raw] : ['-y', raw];
-      const cleanId = raw.replace(/^@[\w-]+\//, '').replace(/^mcp-server-|^mcp-|^server-|-mcp$/gi, '').toLowerCase();
-      return {
-        id: cleanId || 'mcp-server',
-        name: raw,
-        command: cmd,
-        args: pkgArgs,
-        env: cleanId === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-        transport: 'stdio',
-        description: `Package ${raw}`,
-        type: 'Package Name',
-      };
-    }
-
-    return null;
-  }
+  const splitArgs = splitCommandArgs;
 
   function McpSettingsSection() {
     React.useSyncExternalStore(callback => ctx.locale.subscribe(callback), () => ctx.locale.getSnapshot());
@@ -357,6 +177,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     const [presets, setPresets] = React.useState([]);
     const [quickInput, setQuickInput] = React.useState('');
     const [detectedType, setDetectedType] = React.useState(null);
+    const [quickError, setQuickError] = React.useState(null);
 
     // Form state
     const [formId, setFormId] = React.useState('');
@@ -375,7 +196,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     async function loadData() {
       try {
         setLoading(true);
-        const res = await fetch('/harness-qol/mcp/list');
+        const res = await requestMcp('/harness-qol/mcp/list');
         if (res.ok) {
           const data = await res.json();
           if (data && data.ok) {
@@ -393,7 +214,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
 
     async function loadPresets() {
       try {
-        const res = await fetch('/harness-qol/mcp/presets');
+        const res = await requestMcp('/harness-qol/mcp/presets');
         if (res.ok) {
           const data = await res.json();
           if (data && data.ok && Array.isArray(data.presets)) {
@@ -411,7 +232,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     async function toggleServer(id, enabled) {
       setServers(prev => prev.map(s => s.id === id ? { ...s, enabled: !enabled, status: !enabled ? 'connecting' : 'disabled' } : s));
       try {
-        const res = await fetch('/harness-qol/mcp/toggle', {
+        const res = await requestMcp('/harness-qol/mcp/toggle', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ id, enabled: !enabled }),
@@ -427,7 +248,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     async function restartServer(id) {
       try {
         setServers(prev => prev.map(s => s.id === id ? { ...s, status: 'connecting' } : s));
-        await fetch('/harness-qol/mcp/restart', {
+        await requestMcp('/harness-qol/mcp/restart', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ id }),
@@ -441,7 +262,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     async function deleteServer(id) {
       if (!confirm(`Delete MCP server "${id}"?`)) return;
       try {
-        await fetch('/harness-qol/mcp/delete', {
+        await requestMcp('/harness-qol/mcp/delete', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ id }),
@@ -456,13 +277,14 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
       setEditingServer(srv);
       setTestResult(null);
       setQuickInput('');
+      setQuickError(null);
       setDetectedType(null);
       if (srv) {
         setFormId(srv.id || '');
         setFormName(srv.name || srv.id || '');
         setFormTransport(srv.transport || 'stdio');
         setFormCommand(srv.command || '');
-        setFormArgs(Array.isArray(srv.args) ? srv.args.join(' ') : '');
+        setFormArgs(Array.isArray(srv.args) ? formatMcpArgs(srv.args) : '');
         setFormUrl(srv.url || '');
         setFormCwd(srv.cwd || '');
         setFormDesc(srv.description || '');
@@ -494,12 +316,12 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
       if (p.id) setFormId(p.id);
       if (p.name) setFormName(p.name);
       if (p.transport) setFormTransport(p.transport);
-      if (p.command !== undefined) setFormCommand(p.command);
-      if (p.args) setFormArgs(Array.isArray(p.args) ? p.args.join(' ') : String(p.args));
-      if (p.url !== undefined) setFormUrl(p.url);
-      if (p.cwd !== undefined) setFormCwd(p.cwd);
-      if (p.description) setFormDesc(p.description);
-      if (p.tip) setFormTip(p.tip);
+      setFormCommand(p.command || '');
+      setFormArgs(Array.isArray(p.args) ? formatMcpArgs(p.args) : '');
+      setFormUrl(p.url || '');
+      setFormCwd(p.cwd || '');
+      setFormDesc(p.description || '');
+      setFormTip(p.tip || '');
       if (p.env && typeof p.env === 'object') {
         const envList = [];
         for (const [k, v] of Object.entries(p.env)) {
@@ -510,11 +332,14 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     }
 
     function applyPreset(p) {
+      setQuickInput('');
+      setQuickError(null);
+      setDetectedType(null);
       setFormId(p.id || '');
       setFormName(p.name || '');
       setFormTransport(p.transport || 'stdio');
       setFormCommand(p.command || '');
-      setFormArgs(Array.isArray(p.args) ? p.args.join(' ') : '');
+      setFormArgs(Array.isArray(p.args) ? formatMcpArgs(p.args) : '');
       setFormUrl(p.url || '');
       setFormDesc(p.description || '');
       setFormTip(p.tip || '');
@@ -530,53 +355,43 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
 
     function handleQuickInput(val) {
       setQuickInput(val);
-      if (!val || !val.trim()) {
-        setDetectedType(null);
-        return;
-      }
-      const clientParsed = smartParseClient(val);
-      if (clientParsed) {
-        setDetectedType(clientParsed.type || 'Server detected');
-        applyParsedServer(clientParsed);
-        return;
-      }
       setDetectedType(null);
-
-      fetch('/harness-qol/mcp/smart-parse', {
-        method: 'POST',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ input: val.trim() }),
-      })
-        .then(res => res.json())
-        .then(data => {
-          if (data && data.ok && data.parsed) {
-            setDetectedType(data.parsed.type || 'Server detected');
-            applyParsedServer(data.parsed);
-          }
-        })
-        .catch(() => {});
+      setQuickError(null);
+      setTestResult(null);
+      if (!val.trim()) return;
+      try {
+        const parsed = smartParseInput(val);
+        if (!parsed) throw mcpInputError('unsupportedInput', 'Paste an MCP command, configuration JSON, endpoint, or a supported GitHub link.');
+        applyParsedServer(parsed);
+        setDetectedType(parsed.type || 'MCP configuration');
+      } catch (err) {
+        // Keep the previous draft visible, but never save/test stale fields for a rejected link.
+        setQuickError({ code: err.code || 'unsupportedInput', message: err.message });
+      }
     }
 
     async function testCurrentForm() {
+      if (quickError || testing) return;
       setTesting(true);
       setTestResult(null);
-      const envObj = {};
-      for (const item of formEnv) {
-        if (item.key.trim()) envObj[item.key.trim()] = item.value;
-      }
-      const argsArray = formArgs.trim() ? splitArgs(formArgs) : [];
-      const payload = {
-        id: formId.trim() || 'test-server',
-        name: formName.trim() || formId.trim(),
-        transport: formTransport,
-        command: formCommand.trim(),
-        args: argsArray,
-        env: envObj,
-        cwd: formCwd.trim() || undefined,
-        url: formUrl.trim(),
-      };
       try {
-        const res = await fetch('/harness-qol/mcp/test', {
+        const envObj = {};
+        for (const item of formEnv) {
+          if (item.key.trim()) envObj[item.key.trim()] = item.value;
+        }
+        const argsArray = formArgs.trim() ? splitArgs(formArgs) : [];
+        const payload = {
+          id: formId.trim() || 'test-server',
+          name: formName.trim() || formId.trim(),
+          transport: formTransport,
+          command: formCommand.trim(),
+          args: argsArray,
+          env: envObj,
+          cwd: formCwd.trim() || undefined,
+          url: formUrl.trim(),
+        };
+        validateMcpServerInput(payload);
+        const res = await requestMcp('/harness-qol/mcp/test', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(payload),
@@ -591,6 +406,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
     }
 
     async function saveCurrentForm() {
+      if (quickError || testing) return;
       if (!formId.trim()) {
         alert('Please specify a Server ID (e.g. "filesystem").');
         return;
@@ -604,37 +420,39 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
         return;
       }
 
-      const envObj = {};
-      for (const item of formEnv) {
-        if (item.key.trim()) envObj[item.key.trim()] = item.value;
-      }
-      const argsArray = formArgs.trim() ? splitArgs(formArgs) : [];
-      const payload = {
-        id: formId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-        name: formName.trim() || formId.trim(),
-        transport: formTransport,
-        command: formCommand.trim(),
-        args: argsArray,
-        env: envObj,
-        cwd: formCwd.trim() || undefined,
-        url: formUrl.trim(),
-        description: formDesc.trim(),
-        tip: formTip.trim(),
-        enabled: editingServer ? editingServer.enabled : true,
-      };
-
       try {
-        const res = await fetch('/harness-qol/mcp/save', {
+        const envObj = {};
+        for (const item of formEnv) {
+          if (item.key.trim()) envObj[item.key.trim()] = item.value;
+        }
+        const argsArray = formArgs.trim() ? splitArgs(formArgs) : [];
+        const payload = {
+          id: formId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
+          name: formName.trim() || formId.trim(),
+          transport: formTransport,
+          command: formCommand.trim(),
+          args: argsArray,
+          env: envObj,
+          cwd: formCwd.trim() || undefined,
+          url: formUrl.trim(),
+          description: formDesc.trim(),
+          tip: formTip.trim(),
+          enabled: editingServer ? editingServer.enabled : true,
+        };
+
+        validateMcpServerInput(payload);
+        const res = await requestMcp('/harness-qol/mcp/save', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ server: payload }),
         });
-        if (res.ok) {
+        const data = await res.json();
+        if (res.ok && data.ok) {
           setEditModalOpen(false);
           loadData();
         } else {
-          const err = await res.json();
-          alert(`Save error: ${err.error || 'Failed to save'}`);
+          setTestResult({ ...data, ok: false, error: data.error || 'Failed to save' });
+          if (data.saved) loadData();
         }
       } catch (err) {
         alert(`Error: ${err.message}`);
@@ -645,7 +463,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
       setImportError('');
       if (!importText.trim()) return;
       try {
-        const res = await fetch('/harness-qol/mcp/import', {
+        const res = await requestMcp('/harness-qol/mcp/import', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify({ config: importText.trim() }),
@@ -665,7 +483,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
 
     async function handleImportClaude() {
       try {
-        const res = await fetch('/harness-qol/mcp/import-claude', { method: 'POST' });
+        const res = await requestMcp('/harness-qol/mcp/import-claude', { method: 'POST' });
         const data = await res.json();
         if (data.ok) {
           alert(`Imported ${data.count} servers successfully.`);
@@ -680,7 +498,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
 
     async function openConfigFile() {
       try {
-        await fetch('/harness-qol/mcp/open-config', { method: 'POST' });
+        await requestMcp('/harness-qol/mcp/open-config', { method: 'POST' });
       } catch (_e) {}
     }
 
@@ -883,13 +701,11 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
                 h('input', {
                   type: 'text',
                   className: 'hq-mcp-input',
-                  placeholder: 'Paste GitHub URL, npx/uvx command, package name, or JSON...',
+                  placeholder: t('mcp.quickPlaceholder'),
+                  'aria-invalid': !!quickError,
+                  'aria-describedby': quickError ? 'hq-mcp-quick-error' : undefined,
                   value: quickInput,
                   onChange: e => handleQuickInput(e.target.value),
-                  onPaste: e => {
-                    const text = e.clipboardData?.getData('text') || '';
-                    if (text) setTimeout(() => handleQuickInput(text), 10);
-                  },
                 }),
                 h('button', {
                   type: 'button',
@@ -897,7 +713,9 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
                   style: { flex: 'none' },
                   onClick: () => handleQuickInput(quickInput),
                 }, 'Apply')),
-              h('span', { className: 'hq-mcp-hint' }, 'Automatically detects package name, arguments, repository, and environment variables.')),
+              h('span', { className: 'hq-mcp-hint' }, t('mcp.quickHint')),
+              quickError && h('div', { id: 'hq-mcp-quick-error', role: 'alert', className: 'hq-mcp-error-box' },
+                t('mcp.quickError.' + quickError.code) || quickError.message)),
 
             // Server ID & Name
             h('div', { style: { display: 'flex', gap: '12px' } },
@@ -1062,7 +880,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
               type: 'button',
               className: 'hq-mcp-btn hq-mcp-btn-secondary',
               onClick: testCurrentForm,
-              disabled: testing,
+              disabled: testing || !!quickError,
             }, testing ? 'Testing…' : 'Test connection'),
             h('div', { style: { display: 'flex', gap: '8px' } },
               h('button', {
@@ -1074,6 +892,7 @@ function registerMcpClient(ctx, React, t, store = qolModulesStore) {
                 type: 'button',
                 className: 'hq-mcp-btn hq-mcp-btn-primary',
                 onClick: saveCurrentForm,
+                disabled: testing || !!quickError,
               }, 'Save')))))),
 
       // Import JSON Modal

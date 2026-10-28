@@ -53,12 +53,8 @@ test('smartParseInput: detects bare package names', () => {
   assert.equal(pyResult.command, 'uvx');
 });
 
-test('smartParseInput: detects generic GitHub repository', () => {
-  const result = smartParseInput('https://github.com/modelcontextprotocol/servers');
-  assert.ok(result);
-  assert.equal(result.id, 'servers');
-  assert.equal(result.command, 'npx');
-  assert.deepEqual(result.args, ['-y', 'servers']);
+test('smartParseInput: rejects generic GitHub repository instead of guessing an npm package', () => {
+  assert.throws(() => smartParseInput('https://github.com/modelcontextprotocol/servers'), { code: 'unsupportedRepository' });
 });
 
 test('smartParseInput: detects HTTP and SSE endpoints', () => {

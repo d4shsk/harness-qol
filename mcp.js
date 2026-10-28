@@ -1,3 +1,6 @@
+import { admitMcpResult, renderMcpResult } from './mcp-content.js';
+import { smartParseInput, validateMcpServerInput } from './mcp-input.js';
+export { smartParseInput, splitCommandArgs } from './mcp-input.js';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { mkdir, readFile, writeFile, stat } from 'node:fs/promises';
@@ -43,206 +46,8 @@ export function openPathInExplorer(targetPath, isFile = false) {
   }
 }
 
-export function splitCommandArgs(str) {
-  if (!str || typeof str !== 'string') return [];
-  const matches = [];
-  let current = '';
-  let inDouble = false;
-  let inSingle = false;
-
-  for (let i = 0; i < str.length; i++) {
-    const char = str[i];
-    if (char === '"' && !inSingle) {
-      inDouble = !inDouble;
-    } else if (char === "'" && !inDouble) {
-      inSingle = !inSingle;
-    } else if (/\s/.test(char) && !inDouble && !inSingle) {
-      if (current.length > 0) {
-        matches.push(current);
-        current = '';
-      }
-    } else {
-      current += char;
-    }
-  }
-  if (current.length > 0) {
-    matches.push(current);
-  }
-  return matches;
-}
-
-export function smartParseInput(input) {
-  if (typeof input !== 'string') return null;
-  const raw = input.trim();
-  if (!raw) return null;
-
-  // 1. JSON configuration (e.g. Claude Desktop, Cursor or raw server definition)
-  let jsonToParse = raw;
-  if (!jsonToParse.startsWith('{') && /^\s*"[\w-]+"\s*:\s*\{/.test(jsonToParse)) {
-    jsonToParse = '{' + jsonToParse + '}';
-  }
-  if (jsonToParse.startsWith('{')) {
-    try {
-      const parsed = JSON.parse(jsonToParse);
-      if (parsed.mcpServers && typeof parsed.mcpServers === 'object') {
-        const firstKey = Object.keys(parsed.mcpServers)[0];
-        if (firstKey) {
-          const cfg = parsed.mcpServers[firstKey];
-          return {
-            id: firstKey,
-            name: cfg.name || firstKey,
-            command: cfg.command || '',
-            args: Array.isArray(cfg.args) ? cfg.args : [],
-            env: cfg.env && typeof cfg.env === 'object' ? cfg.env : {},
-            cwd: cfg.cwd || '',
-            url: cfg.url || '',
-            headers: cfg.headers && typeof cfg.headers === 'object' ? cfg.headers : {},
-            transport: cfg.transport || (cfg.url ? 'streamable-http' : 'stdio'),
-            description: cfg.description || '',
-            type: 'JSON (mcpServers)',
-          };
-        }
-      }
-      if (parsed.command || parsed.url) {
-        const id = parsed.id || parsed.name || 'custom-mcp';
-        return {
-          id: id.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-          name: parsed.name || id,
-          command: parsed.command || '',
-          args: Array.isArray(parsed.args) ? parsed.args : [],
-          env: parsed.env && typeof parsed.env === 'object' ? parsed.env : {},
-          cwd: parsed.cwd || '',
-          url: parsed.url || '',
-          headers: parsed.headers && typeof parsed.headers === 'object' ? parsed.headers : {},
-          transport: parsed.transport || (parsed.url ? 'streamable-http' : 'stdio'),
-          description: parsed.description || '',
-          type: 'JSON (Config)',
-        };
-      }
-      const firstKey = Object.keys(parsed)[0];
-      if (firstKey && typeof parsed[firstKey] === 'object') {
-        const cfg = parsed[firstKey];
-        return {
-          id: firstKey,
-          name: cfg.name || firstKey,
-          command: cfg.command || '',
-          args: Array.isArray(cfg.args) ? cfg.args : [],
-          env: cfg.env && typeof cfg.env === 'object' ? cfg.env : {},
-          cwd: cfg.cwd || '',
-          url: cfg.url || '',
-          headers: cfg.headers && typeof cfg.headers === 'object' ? cfg.headers : {},
-          transport: cfg.transport || (cfg.url ? 'streamable-http' : 'stdio'),
-          description: cfg.description || '',
-          type: 'JSON',
-        };
-      }
-    } catch (_e) {}
-  }
-
-  // 2. GitHub repository URL
-  const ghSubpathMatch = raw.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)\/tree\/[^\/]+\/src\/([A-Za-z0-9_.-]+)/i);
-  if (ghSubpathMatch) {
-    const sub = ghSubpathMatch[3];
-    return {
-      id: sub.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-      name: `${sub} MCP`,
-      command: 'npx',
-      args: ['-y', `@modelcontextprotocol/server-${sub}`],
-      env: sub === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-      transport: 'stdio',
-      description: `Официальный сервер ${sub} из GitHub`,
-      source: raw,
-      type: 'GitHub Subtree',
-    };
-  }
-
-  const ghMatch = raw.match(/github\.com\/([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)/i);
-  if (ghMatch) {
-    const owner = ghMatch[1];
-    const repo = ghMatch[2].replace(/\.git$/, '');
-
-    const cleanId = repo.replace(/^mcp-server-|^mcp-|-mcp$/gi, '') || repo;
-    return {
-      id: cleanId.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-      name: repo,
-      command: 'npx',
-      args: ['-y', repo],
-      env: {},
-      transport: 'stdio',
-      description: `MCP сервер из GitHub (${owner}/${repo})`,
-      source: `https://github.com/${owner}/${repo}`,
-      type: 'GitHub Repo',
-    };
-  }
-
-  // 3. HTTP / SSE URL endpoint
-  if (/^https?:\/\//i.test(raw)) {
-    try {
-      const url = new URL(raw);
-      const pathname = url.pathname.replace(/\/$/, '');
-      const lastPart = pathname.split('/').pop() || 'remote-mcp';
-      return {
-        id: lastPart.toLowerCase().replace(/[^a-z0-9_-]/g, '-'),
-        name: `${url.hostname} MCP`,
-        url: raw,
-        transport: 'streamable-http',
-        headers: {},
-        description: `Удалённый MCP сервер: ${raw}`,
-        type: 'HTTP Endpoint',
-      };
-    } catch (_e) {}
-  }
-
-  // 4. CLI command string (e.g. "npx -y @modelcontextprotocol/server-filesystem", "uvx mcp-server-sqlite --db-path ./test.db")
-  if (/^(npx|uvx|docker|node|python|python3)\b/i.test(raw)) {
-    const parts = splitCommandArgs(raw);
-    const command = parts[0];
-    const args = parts.slice(1);
-
-    let guessedName = 'mcp-server';
-    for (const arg of args) {
-      if (!arg.startsWith('-') && !arg.includes('=') && (!arg.includes('/') || arg.startsWith('@')) && !arg.includes('\\')) {
-        guessedName = arg.replace(/^@[\w-]+\//, '');
-        break;
-      }
-    }
-
-    const cleanId = guessedName.replace(/^@[\w-]+\//, '').replace(/^mcp-server-|^mcp-|^server-|-mcp$/gi, '').toLowerCase().replace(/[^a-z0-9_-]/g, '-');
-
-    return {
-      id: cleanId || 'custom-mcp',
-      name: guessedName || command,
-      command,
-      args,
-      env: cleanId === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-      transport: 'stdio',
-      description: raw,
-      type: 'CLI Command',
-    };
-  }
-
-  // 5. Bare package name (e.g. "@modelcontextprotocol/server-filesystem", "mcp-server-sqlite")
-  if (/^(@[\w-]+\/)?[\w-]+$/.test(raw)) {
-    const isPython = /^mcp-server-/.test(raw);
-    const cmd = isPython ? 'uvx' : 'npx';
-    const pkgArgs = isPython ? [raw] : ['-y', raw];
-    const cleanId = raw.replace(/^@[\w-]+\//, '').replace(/^mcp-server-|^mcp-|^server-|-mcp$/gi, '').toLowerCase();
-    return {
-      id: cleanId || 'mcp-server',
-      name: raw,
-      command: cmd,
-      args: pkgArgs,
-      env: cleanId === 'github' ? { GITHUB_PERSONAL_ACCESS_TOKEN: '' } : {},
-      transport: 'stdio',
-      description: `Пакет ${raw}`,
-      type: 'Package Name',
-    };
-  }
-
-  return null;
-}
-
 export const MCP_PRESETS = [
+  { ...smartParseInput('https://github.com/vercel-labs/agent-browser'), category: 'Browser' },
   {
     id: 'filesystem',
     name: 'Local Filesystem',
@@ -511,10 +316,10 @@ class McpProcessConnection {
       this.connectedAt = Date.now();
       return { ok: true, serverInfo: this.serverInfo, tools: this.tools };
     } catch (err) {
-      this.status = 'error';
       const recentStderr = this.stderrBuffer.slice(-10).join('').trim();
       this.error = recentStderr ? `${err.message}\n${recentStderr}` : err.message;
       this.disconnect();
+      this.status = 'error';
       throw err;
     }
   }
@@ -642,6 +447,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   const toolDisposers = new Map();
   const systemPromptDisposers = new Map();
   let serverConfigs = new Map();
+  let disposed = false;
 
   function normalizeServerConfig(id, raw) {
     if (!raw || typeof raw !== 'object') return null;
@@ -759,28 +565,18 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
           parameters: schema,
           output: {
             schema: { type: 'object', additionalProperties: true },
-            render: (_args, value) => {
-              if (typeof value === 'string') return [{ type: 'text', text: value }];
-              if (value && typeof value === 'object' && Array.isArray(value.content)) {
-                return value.content.map(c => {
-                  if (c.type === 'text') return { type: 'text', text: c.text };
-                  if (c.type === 'image') return { type: 'image', data: c.data, mimeType: c.mimeType };
-                  return { type: 'text', text: JSON.stringify(c) };
-                });
-              }
-              return [{ type: 'text', text: JSON.stringify(value, null, 2) }];
-            },
+            render: renderMcpResult,
           },
           isConcurrencySafe: () => false,
           execute: async (args, exec) => {
             const result = await conn.callTool(rawName, args, exec.signal);
             if (result && result.isError) {
               const errorText = Array.isArray(result.content)
-                ? result.content.map(c => c.text || JSON.stringify(c)).join('\n')
+                ? result.content.map(c => c?.text || JSON.stringify(c)).join('\n')
                 : 'MCP tool execution failed';
               throw new Error(errorText);
             }
-            return result;
+            return admitMcpResult(result, ctx.get('attachments'), exec.signal);
           },
         });
         if (typeof dispose === 'function') {
@@ -815,6 +611,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   }
 
   async function startServer(id) {
+    if (disposed) return { ok: false, status: 'disabled', error: 'MCP manager was unloaded' };
     const cfg = serverConfigs.get(id);
     if (!cfg) throw new Error(`MCP server "${id}" not found`);
 
@@ -829,6 +626,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
       return { ok: true, status: 'disabled', message: 'Server is disabled' };
     }
 
+    validateMcpServerInput(cfg);
     const conn = cfg.transport === 'streamable-http' || cfg.transport === 'sse'
       ? new McpHttpConnection(cfg, console)
       : new McpProcessConnection(cfg, console);
@@ -837,6 +635,10 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
 
     try {
       const result = await conn.connect();
+      if (disposed || connections.get(id) !== conn) {
+        conn.disconnect();
+        return { ok: false, status: 'disabled', error: 'MCP connection was superseded or unloaded' };
+      }
       registerServerTools(id, conn);
       return {
         ok: true,
@@ -871,6 +673,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   async function testServer(serverData) {
     const cfg = normalizeServerConfig(serverData?.id || 'test-server', serverData);
     if (!cfg) throw new Error('Invalid server configuration');
+    validateMcpServerInput(cfg);
 
     const conn = cfg.transport === 'streamable-http' || cfg.transport === 'sse'
       ? new McpHttpConnection(cfg, console)
@@ -911,15 +714,12 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   async function saveServer(serverData) {
     const cfg = normalizeServerConfig(serverData.id, serverData);
     if (!cfg) throw new Error('Invalid server configuration');
+    validateMcpServerInput(cfg);
     serverConfigs.set(cfg.id, cfg);
     await saveConfig();
 
-    if (cfg.enabled) {
-      await restartServer(cfg.id);
-    } else {
-      stopServer(cfg.id);
-    }
-    return { ok: true, server: cfg };
+    const connection = cfg.enabled ? await restartServer(cfg.id) : stopServer(cfg.id);
+    return { ...connection, saved: true, server: cfg };
   }
 
   async function deleteServer(id) {
@@ -939,9 +739,10 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
     }
 
     const map = parsed.mcpServers || parsed.servers || (parsed && typeof parsed === 'object' ? parsed : {});
+    const imported = Object.entries(map).map(([key, value]) => normalizeServerConfig(key, value)).filter(Boolean);
+    for (const cfg of imported) validateMcpServerInput(cfg);
     let count = 0;
-    for (const [key, value] of Object.entries(map)) {
-      const cfg = normalizeServerConfig(key, value);
+    for (const cfg of imported) {
       if (cfg) {
         serverConfigs.set(cfg.id, cfg);
         count++;
@@ -996,6 +797,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   async function startAllEnabled() {
     if (settings && !settings.isModuleEnabled('mcp')) return;
     await loadConfig();
+    if (disposed) return;
     for (const [id, cfg] of serverConfigs.entries()) {
       if (cfg.enabled) {
         startServer(id).catch(err => {
@@ -1006,7 +808,7 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
   }
 
   function stopAll() {
-    for (const id of serverConfigs.keys()) {
+    for (const id of new Set([...serverConfigs.keys(), ...connections.keys()])) {
       stopServer(id);
     }
   }
@@ -1026,117 +828,95 @@ export function createMcpManager(ctx, settingsState, customConfigPath) {
     importFromClaude,
     startAllEnabled,
     stopAll,
+    dispose() { disposed = true; stopAll(); },
     getMcpConfigPath,
   };
+}
+
+async function mcpOperation(manager, method, action, payload = {}, queryInput = '') {
+  if (method === 'GET') {
+    if (action === 'list' || action === '') return manager.getServers();
+    if (action === 'presets') return { ok: true, presets: MCP_PRESETS };
+  }
+  if (action === 'smart-parse') {
+    const parsed = smartParseInput(method === 'GET' ? queryInput : payload.input || '');
+    return { ok: !!parsed, parsed };
+  }
+  if (method === 'POST') {
+    if (action === 'toggle') return manager.toggleServer(payload.id, payload.enabled);
+    if (action === 'save') return manager.saveServer(payload.server || payload);
+    if (action === 'delete') return manager.deleteServer(payload.id);
+    if (action === 'restart') return manager.restartServer(payload.id);
+    if (action === 'test') return manager.testServer(payload.server || payload);
+    if (action === 'import') return manager.importConfig(payload.config || payload.rawJson || payload);
+    if (action === 'import-claude') return manager.importFromClaude();
+    if (action === 'open-config') {
+      openPathInExplorer(manager.getMcpConfigPath(), true);
+      return { ok: true };
+    }
+  }
+  throw Object.assign(new Error('Endpoint not found'), { status: 404 });
+}
+
+export function registerMcpConnection(ctx, manager) {
+  const connection = ctx.get('connection');
+  if (!connection?.fetch) return;
+  for (const action of ['list', 'presets', 'smart-parse', 'toggle', 'save', 'delete', 'restart', 'test', 'import', 'import-claude', 'open-config']) {
+    const methods = ['list', 'presets'].includes(action) ? ['GET'] : action === 'smart-parse' ? ['GET', 'POST'] : ['POST'];
+    ctx.effect(() => connection.fetch.register({
+      path: `/api/harness-qol/mcp/${action}`, methods, requestBody: 'buffered',
+      async fetch(request) {
+        const send = (status, data) => Response.json(data, { status, headers: { 'cache-control': 'no-store' } });
+        try {
+          let payload = {};
+          if (request.method === 'POST') {
+            if (!/^application\/json(?:;|$)/i.test(request.headers.get('content-type') || '')) return send(415, { ok: false, error: 'JSON required' });
+            const text = await request.text();
+            if (Buffer.byteLength(text) > 512 * 1024) return send(413, { ok: false, error: 'Payload too large' });
+            payload = text ? JSON.parse(text) : {};
+          }
+          return send(200, await mcpOperation(manager, request.method, action, payload, new URL(request.url).searchParams.get('input')));
+        } catch (err) {
+          return send(err.status || 400, { ok: false, error: err.message, code: err.code });
+        }
+      },
+    }));
+  }
 }
 
 export function registerMcpHttp(ctx, state, manager) {
   const webServer = ctx.get('webServer');
   if (!webServer) return;
   const connection = ctx.get('connection');
-
   ctx.effect(() => webServer.register({
-    kind: 'prefix',
-    path: '/harness-qol/mcp',
+    kind: 'prefix', path: '/harness-qol/mcp',
     async handler(request, response) {
       const send = (status, data) => {
-        response.writeHead(status, {
-          'content-type': 'application/json; charset=utf-8',
-          'cache-control': 'no-store',
-          'x-content-type-options': 'nosniff',
-          'access-control-allow-origin': '*',
-          'access-control-allow-methods': 'GET,POST,OPTIONS',
-          'access-control-allow-headers': 'content-type',
-        });
+        response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' });
         response.end(JSON.stringify(data));
       };
-
-      if (request.method === 'OPTIONS') {
-        response.writeHead(204, {
-          'access-control-allow-origin': '*',
-          'access-control-allow-methods': 'GET,POST,OPTIONS',
-          'access-control-allow-headers': 'content-type',
-        });
-        return response.end();
-      }
-
       if (connection) {
         const rejection = connection.requestRejection(request);
         if (rejection) return send(rejection, { ok: false, error: 'Unauthorized' });
       }
-
-      const url = new URL(request.url, 'http://localhost');
-      const subpath = url.pathname.replace(/^\/harness-qol\/mcp\/?/, '');
-
+      if (!['GET', 'POST'].includes(request.method)) return send(405, { ok: false, error: 'GET or POST required' });
       try {
-        if (request.method === 'GET') {
-          if (subpath === 'list' || subpath === '') {
-            return send(200, manager.getServers());
-          }
-          if (subpath === 'presets') {
-            return send(200, { ok: true, presets: MCP_PRESETS });
-          }
-          if (subpath === 'smart-parse') {
-            const input = url.searchParams.get('input') || '';
-            const parsed = smartParseInput(input);
-            return send(200, { ok: !!parsed, parsed });
-          }
-          return send(404, { ok: false, error: 'Endpoint not found' });
-        }
-
+        const url = new URL(request.url, 'http://localhost');
+        const action = url.pathname.replace(/^\/harness-qol\/mcp\/?/, '');
+        const chunks = [];
+        let size = 0;
         if (request.method === 'POST') {
-          const chunks = [];
-          let size = 0;
+          if (!/^application\/json(?:;|$)/i.test(request.headers['content-type'] || '')) return send(415, { ok: false, error: 'JSON required' });
           for await (const chunk of request) {
             size += Buffer.byteLength(chunk);
             if (size > 512 * 1024) return send(413, { ok: false, error: 'Payload too large' });
             chunks.push(Buffer.from(chunk));
           }
-          const payload = chunks.length > 0 ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
-
-          if (subpath === 'toggle') {
-            const result = await manager.toggleServer(payload.id, payload.enabled);
-            return send(200, result);
-          }
-          if (subpath === 'save') {
-            const result = await manager.saveServer(payload.server || payload);
-            return send(200, result);
-          }
-          if (subpath === 'delete') {
-            const result = await manager.deleteServer(payload.id);
-            return send(200, result);
-          }
-          if (subpath === 'restart') {
-            const result = await manager.restartServer(payload.id);
-            return send(200, result);
-          }
-          if (subpath === 'test') {
-            const result = await manager.testServer(payload.server || payload);
-            return send(200, result);
-          }
-          if (subpath === 'import') {
-            const result = await manager.importConfig(payload.config || payload.rawJson || payload);
-            return send(200, result);
-          }
-          if (subpath === 'import-claude') {
-            const result = await manager.importFromClaude();
-            return send(200, result);
-          }
-          if (subpath === 'smart-parse') {
-            const parsed = smartParseInput(payload.input || '');
-            return send(200, { ok: !!parsed, parsed });
-          }
-          if (subpath === 'open-config') {
-            openPathInExplorer(manager.getMcpConfigPath(), true);
-            return send(200, { ok: true });
-          }
-
-          return send(404, { ok: false, error: 'Endpoint not found' });
         }
-
-        return send(405, { ok: false, error: 'GET or POST required' });
+        const payload = chunks.length ? JSON.parse(Buffer.concat(chunks).toString('utf8')) : {};
+        return send(200, await mcpOperation(manager, request.method, action, payload, url.searchParams.get('input')));
       } catch (err) {
-        return send(400, { ok: false, error: err.message });
+        return send(err.status || 400, { ok: false, error: err.message, code: err.code });
       }
     },
   }));
@@ -1167,26 +947,29 @@ export const mcpToolParameters = {
   required: ['action']
 };
 
-export function registerMcp(ctx, settingsState, customConfigPath) {
+export function registerMcp(ctx, settingsState, customConfigPath, historyRepair) {
   const settings = settingsState || getSettingsState();
   const manager = createMcpManager(ctx, settings, customConfigPath);
 
+  ctx.inject(['connection'], scope => registerMcpConnection(scope, manager));
   ctx.inject(['webServer'], scope => {
     registerMcpHttp(scope, settings, manager);
   });
+
+  ctx.effect(() => () => manager.dispose());
 
   // Auto-start all enabled MCP servers on application boot
   manager.startAllEnabled().catch(() => {});
 
   // Subscribe to module enabled changes
   if (settings && typeof settings.subscribe === 'function') {
-    settings.subscribe(modules => {
+    ctx.effect(() => settings.subscribe(modules => {
       if (modules.mcp === false) {
         manager.stopAll();
       } else {
         manager.startAllEnabled().catch(() => {});
       }
-    });
+    }));
   }
 
   // Model tool
@@ -1207,7 +990,8 @@ export function registerMcp(ctx, settingsState, customConfigPath) {
         }
         const action = request.action || 'list';
         if (action === 'list') {
-          return manager.getServers();
+          const servers = manager.getServers();
+          return historyRepair ? { ...servers, historyRepair: historyRepair.status() } : servers;
         }
         if (action === 'toggle') {
           if (!request.id) throw new Error('Server "id" is required for toggle action');
