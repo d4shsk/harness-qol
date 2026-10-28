@@ -324,7 +324,7 @@ export const MCP_PRESETS = [
   },
 ];
 
-class McpProcessConnection {
+export class McpProcessConnection {
   constructor(serverConfig, logger) {
     this.config = serverConfig;
     this.logger = logger;
@@ -345,6 +345,26 @@ class McpProcessConnection {
   handleLine(line) {
     try {
       const msg = JSON.parse(line);
+      // Server requests have their own id namespace, including id 0. Handle
+      // them before matching responses to our pending client requests.
+      if (msg && typeof msg.method === 'string') {
+        if (msg.id !== undefined && msg.id !== null) {
+          const response = { jsonrpc: '2.0', id: msg.id };
+          if (msg.method === 'roots/list') {
+            // No roots are currently supplied by this client. An empty list
+            // lets servers use their configured cwd without waiting forever.
+            response.result = { roots: [] };
+          } else if (msg.method === 'ping') {
+            response.result = {};
+          } else {
+            response.error = { code: -32601, message: `Method not found: ${msg.method}` };
+          }
+          if (this.process && !this.process.killed) {
+            this.process.stdin.write(JSON.stringify(response) + '\n');
+          }
+        }
+        return;
+      }
       if (msg && msg.id !== undefined && this.pendingRequests.has(msg.id)) {
         const { resolve, reject, timeoutId } = this.pendingRequests.get(msg.id);
         this.pendingRequests.delete(msg.id);
@@ -476,7 +496,7 @@ class McpProcessConnection {
     try {
       const initResult = await this.sendRequest('initialize', {
         protocolVersion: '2024-11-05',
-        capabilities: { roots: { listChanged: true } },
+        capabilities: { roots: {} },
         clientInfo: { name: 'DeepSeek Harness QOL', version: '1.0.0' },
       }, 15000);
 
