@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          version: 10
+          cache: true
+
+      - name: Install dependencies from lockfile
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Check JavaScript syntax
+        run: git ls-files -z -- '*.js' '*.mjs' | xargs -0 -n 1 node --check
+
+      - name: Run tests
+        run: pnpm test
+
+      - name: Build client
+        run: pnpm build
+
+      - name: Check generated client is up to date
+        run: git diff --exit-code -- client.js
