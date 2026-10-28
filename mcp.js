@@ -324,7 +324,7 @@ export const MCP_PRESETS = [
   },
 ];
 
-export class McpProcessConnection {
+class McpProcessConnection {
   constructor(serverConfig, logger) {
     this.config = serverConfig;
     this.logger = logger;
