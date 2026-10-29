@@ -5,6 +5,7 @@ const images = await readFile(new URL('./images-client.js', import.meta.url), 'u
 const models = await readFile(new URL('./models-client.js', import.meta.url), 'utf8');
 const btw = await readFile(new URL('./btw-client.js', import.meta.url), 'utf8');
 const quote = await readFile(new URL('./quote-client.js', import.meta.url), 'utf8');
+const search = await readFile(new URL('./search-client.js', import.meta.url), 'utf8');
 const consoleClient = await readFile(new URL('./console-client.js', import.meta.url), 'utf8');
 const workspaces = await readFile(new URL('./workspaces-client.js', import.meta.url), 'utf8');
 const messages = await readFile(new URL('./messages-client.js', import.meta.url), 'utf8');
@@ -21,6 +22,7 @@ ${images}
 ${models}
 ${btw}
 ${quote}
+${search}
 ${consoleClient}
 ${workspaces}
 ${messages}
@@ -182,6 +184,7 @@ ${mcpClient}
         ctx.effect(() => registerModelDefaultsClient(ctx, React, store));
         ctx.effect(() => registerBtwClient(ctx, React, store));
         ctx.effect(() => registerQuoteClient(ctx, React, t, store));
+        ctx.effect(() => registerSearchClient(ctx, React, require('react-dom')));
         ctx.effect(() => registerMessagesClient(ctx, React, store));
         ctx.effect(() => registerInstructionsClient(ctx, React, t, store));
         ctx.effect(() => registerMcpClient(ctx, React, t, store));

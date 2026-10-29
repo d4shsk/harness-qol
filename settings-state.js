@@ -2,7 +2,7 @@ import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import { homedir } from 'node:os';
 import { dirname, join } from 'node:path';
 
-export const MODULE_IDS = Object.freeze(['workspaces', 'models', 'btw', 'quote', 'images', 'console', 'messages', 'instructions', 'mcp', 'webSearch']);
+export const MODULE_IDS = Object.freeze(['workspaces', 'models', 'btw', 'quote', 'images', 'console', 'messages', 'instructions', 'mcp', 'webSearch', 'search']);
 
 export const DEFAULT_MODULES = Object.freeze({
   workspaces: true,
@@ -15,6 +15,7 @@ export const DEFAULT_MODULES = Object.freeze({
   instructions: true,
   mcp: true,
   webSearch: true,
+  search: true,
 });
 
 const SETTINGS_FILE = join(homedir(), '.dsh', 'harness-qol-settings.json');
@@ -114,7 +115,10 @@ export function createSettingsState(customFilePath) {
 // Global singleton instance across all plugin files/entries
 const globalKey = Symbol.for('harness_qol_settings_state');
 export function getSettingsState() {
-  if (!globalThis[globalKey]) {
+  // A live bundle upgrade may add modules while the former singleton survives.
+  // Reload committed settings into the new schema rather than retaining methods
+  // whose closed-over MODULE_IDS reject the new switches.
+  if (!globalThis[globalKey] || MODULE_IDS.some(id => !Object.hasOwn(globalThis[globalKey].getModules(), id))) {
     const instance = createSettingsState();
     instance.load().catch(() => {});
     globalThis[globalKey] = instance;

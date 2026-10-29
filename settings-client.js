@@ -19,7 +19,7 @@ async function requestQolSettings(payload) {
 function createModulesStore(request = requestQolSettings) {
   const DEFAULT_MODULES = {
     workspaces: true, models: true, btw: true, quote: true, images: true,
-    console: true, messages: true, instructions: true, mcp: true, webSearch: true,
+    console: true, messages: true, instructions: true, mcp: true, webSearch: true, search: true,
   };
   function normalize(value) {
     return Object.fromEntries(Object.entries(DEFAULT_MODULES).map(([id, fallback]) =>
@@ -117,6 +117,7 @@ const qolModuleInfo = [
   { id: 'workspaces', title: 'Multi-folder Workspaces', description: 'Create and edit workspaces with multiple source folders.' },
   { id: 'models', title: 'Default Model', description: 'Keep a default model for new chats, independent of session changes.' },
   { id: 'btw', title: 'Side Questions (/btw)', description: 'Ask a read-only side question without interrupting the active task.' },
+  { id: 'search', title: 'Chat Search', description: 'Find text in the current chat with ⌘F / Ctrl+F, highlighted matches and keyboard navigation.' },
   { id: 'quote', title: 'Reply Quoting', description: 'Quote selected assistant text in your next message.' },
   { id: 'images', title: 'Image Preview & Copy', description: 'Preview full-size images and copy them to the clipboard.' },
   { id: 'console', title: 'Interactive Process Console', description: 'Launch stdin-enabled background processes and send commands in the Processes chat view. Existing ordinary jobs stay read-only.' },

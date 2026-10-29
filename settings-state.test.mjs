@@ -65,6 +65,23 @@ test('settingsState: setModules updates multiple modules at once', async t => {
   assert.equal(reloaded.isModuleEnabled('workspaces'), true);
 });
 
+test('settingsState: older saved module maps gain configurable chat search without losing preferences', async t => {
+  const file = await tempFilePath(t);
+  const state = createSettingsState(file);
+  await state.setModules({ images: false, models: false });
+  const previous = JSON.parse(await readFile(file, 'utf8'));
+  delete previous.modules.search;
+  const { writeFile } = await import('node:fs/promises');
+  await writeFile(file, JSON.stringify(previous));
+  const upgraded = createSettingsState(file);
+  await upgraded.load();
+  assert.equal(upgraded.isModuleEnabled('search'), true);
+  assert.equal(upgraded.isModuleEnabled('images'), false);
+  assert.equal(upgraded.isModuleEnabled('models'), false);
+  await upgraded.setModule('search', false);
+  assert.equal(JSON.parse(await readFile(file, 'utf8')).modules.search, false);
+});
+
 test('settingsState: rejects unknown module id', async t => {
   const file = await tempFilePath(t);
   const state = createSettingsState(file);

@@ -77,6 +77,7 @@ const moduleInfo = [
   { id: 'workspaces', title: 'Multi-folder Workspaces', description: 'Create and edit workspaces with multiple source folders.' },
   { id: 'models', title: 'Default Model', description: 'Keep a default model for new chats, independent of session changes.' },
   { id: 'btw', title: 'Side Questions (/btw)', description: 'Ask a read-only side question without interrupting the active task.' },
+  { id: 'search', title: 'Chat Search', description: 'Find text in the current chat with ⌘F / Ctrl+F, highlighted matches and keyboard navigation.' },
   { id: 'quote', title: 'Reply Quoting', description: 'Quote selected assistant text in your next message.' },
   { id: 'images', title: 'Image Preview & Copy', description: 'Preview full-size images and copy them to the clipboard.' },
   { id: 'console', title: 'Interactive Process Console', description: 'Launch stdin-enabled background processes and send commands in the Processes chat view. Existing ordinary jobs stay read-only.' },
@@ -364,8 +365,8 @@ test('settings UI: registers only the package-keyed Plugins bundle slot', t => {
   assert.equal(typeof fixture.registrations[0].component, 'function');
 });
 
-test('settings UI: ten accessible English module names and descriptions survive Russian UI', async t => {
-  const modules = { workspaces: true, models: false, btw: true, quote: false, images: true, console: true, messages: true, instructions: true, mcp: true, webSearch: true };
+test('settings UI: eleven accessible English module names and descriptions survive Russian UI', async t => {
+  const modules = { workspaces: true, models: false, btw: true, quote: false, images: true, console: true, messages: true, instructions: true, mcp: true, webSearch: true, search: true };
   const fixture = createSettingsFixture({ cached: modules });
   t.after(() => fixture.dispose());
   fixture.open();
@@ -378,11 +379,11 @@ test('settings UI: ten accessible English module names and descriptions survive 
   assert.equal(styles.length, 1, 'styles are rendered inside the section');
   assert.match(text(styles[0]), /\.hq-set-switch\[aria-checked=true\]/);
   assertAccessibleModules(fixture, modules);
-  assert.equal(status(fixture), '8 of 10 enabled');
+  assert.equal(status(fixture), '9 of 11 enabled');
 
   fixture.setLanguage('ru');
   assert.equal(fixture.renderer.tree.props['aria-label'], 'Модули');
-  assert.equal(status(fixture), 'Включено 8 из 10');
+  assert.equal(status(fixture), 'Включено 9 из 11');
   assert.equal(action(fixture, 'Включить все').props.disabled, false);
   assert.equal(action(fixture, 'Выключить все').props.disabled, false);
   assertAccessibleModules(fixture, modules);
@@ -402,7 +403,7 @@ test('settings UI: individual switches use the original store and single-module 
   assert.deepEqual(plain(fixture.store.get()), disabledModel);
   assert.equal(fixture.store.isEnabled('models'), false);
   assertAccessibleModules(fixture, disabledModel);
-  assert.equal(status(fixture), 'Включено 9 из 10');
+  assert.equal(status(fixture), 'Включено 10 из 11');
   assert.equal(action(fixture, 'Включить все').props.disabled, false);
 
   await switches(fixture)[1].props.onClick();
@@ -425,14 +426,14 @@ test('settings UI: disable/enable all persist the original complete modules payl
   await action(fixture, 'Disable all').props.onClick();
   assert.deepEqual(plain(fixture.store.get()), allModules(false));
   assertAccessibleModules(fixture, allModules(false));
-  assert.equal(status(fixture), '0 of 10 enabled');
+  assert.equal(status(fixture), '0 of 11 enabled');
   assert.equal(action(fixture, 'Enable all').props.disabled, false);
   assert.equal(action(fixture, 'Disable all').props.disabled, true);
 
   await action(fixture, 'Enable all').props.onClick();
   assert.deepEqual(plain(fixture.store.get()), allModules(true));
   assertAccessibleModules(fixture, allModules(true));
-  assert.equal(status(fixture), '10 of 10 enabled');
+  assert.equal(status(fixture), '11 of 11 enabled');
   assert.equal(action(fixture, 'Enable all').props.disabled, true);
   assert.equal(action(fixture, 'Disable all').props.disabled, false);
   assertPersistence(fixture, [{ modules: allModules(false) }, { modules: allModules(true) }],
@@ -470,7 +471,7 @@ test('settings UI: cleans up subscriptions and syncs persisted settings on each 
   assertAccessibleModules(fixture, { ...initialServer, images: false, btw: false });
   await fixture.settle();
   assertAccessibleModules(fixture, reopenedServer);
-  assert.equal(status(fixture), 'Включено 1 из 10');
+  assert.equal(status(fixture), 'Включено 1 из 11');
   assert.deepEqual(plain(fixture.store.get()), reopenedServer);
   assert.deepEqual(JSON.parse(fixture.storage.get('harness_qol_modules')), reopenedServer);
   assert.equal(getRequests().length, 2, 'reopening reconciles with persisted server settings');
