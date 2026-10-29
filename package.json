@@ -1,6 +1,6 @@
 {
   "name": "@local/harness-qol",
-  "version": "1.8.9",
+  "version": "1.8.11",
   "description": "Workspace, model, side-question, quoting, image tools, message editing, instructions, MCP server manager, and default web search control with module controls in Settings/Plugins.",
   "dependencies": { "zod": "^4.1.12" },
   "private": true,

@@ -2286,6 +2286,23 @@ const qolQueueDockLayout = {
   margin: '0 auto 8px',
 };
 
+// Shared chrome for the sent-message and queue editors: one radius scale and
+// theme-token hover states. Focus only recolors the border, no ring.
+const qolEditorRadii = { card: '14px', field: '10px', button: '8px' };
+const qolEditorPrimaryFill = 'var(--dsw-alias-button-primary-fill, var(--dsw-alias-label-primary))';
+const qolEditorPrimaryHover = 'var(--dsw-alias-button-primary-hover, var(--dsw-alias-label-primary))';
+
+function qolEditorFieldHandlers(restingBorderColor) {
+  return {
+    onFocus: e => {
+      e.currentTarget.style.borderColor = 'var(--dsw-alias-brand-primary)';
+    },
+    onBlur: e => {
+      e.currentTarget.style.borderColor = restingBorderColor;
+    },
+  };
+}
+
 // The normal Chat is an audit transcript, so surface replacements alone do
 // not remove old answers there. Claim only superseded events for the Chat
 // target; Trajectory/audit history and the native event source stay untouched.
@@ -2617,13 +2634,25 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
         key: label, type: 'button', onClick, disabled, title,
         style: {
           display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
-          width: '100%', minWidth: 0, height: '30px', boxSizing: 'border-box',
-          padding: '0 8px', borderRadius: '7px', font: 'inherit', fontSize: '12px', lineHeight: '18px',
+          width: '100%', minWidth: 0, height: '32px', boxSizing: 'border-box',
+          padding: '0 8px', borderRadius: qolEditorRadii.button, font: 'inherit', fontSize: '12px', lineHeight: '18px',
           fontWeight: 500, cursor: disabled ? 'not-allowed' : 'pointer',
-          opacity: disabled ? 0.45 : 1, transition: 'background-color 0.15s, opacity 0.15s',
+          opacity: disabled ? 0.45 : 1, transition: 'background-color 0.15s, border-color 0.15s, opacity 0.15s',
           border: primary ? '1px solid transparent' : '1px solid var(--dsw-alias-border-l1)',
-          backgroundColor: primary ? 'var(--dsw-alias-label-primary)' : 'var(--dsw-alias-bg-base)',
+          backgroundColor: primary ? qolEditorPrimaryFill : 'var(--dsw-alias-bg-base)',
           color: primary ? 'var(--dsw-alias-bg-base)' : 'var(--dsw-alias-label-primary)',
+          boxShadow: 'none',
+        },
+        onMouseEnter: e => {
+          if (disabled) return;
+          e.currentTarget.style.backgroundColor = primary
+            ? qolEditorPrimaryHover
+            : 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))';
+          if (primary) e.currentTarget.style.opacity = '0.92';
+        },
+        onMouseLeave: e => {
+          e.currentTarget.style.backgroundColor = primary ? qolEditorPrimaryFill : 'var(--dsw-alias-bg-base)';
+          if (primary) e.currentTarget.style.opacity = disabled ? '0.45' : '1';
         },
       }, label);
       return h('div', {
@@ -2633,9 +2662,10 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
         h('div', {
           key: 'editor', role: 'group', 'aria-label': mt('edit.title'), 'aria-busy': busy !== null,
           style: {
-            width: '100%', maxWidth: '560px', minWidth: 0, boxSizing: 'border-box', padding: '8px',
-            backgroundColor: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l2)',
-            borderRadius: '12px', overflow: 'hidden',
+            width: '100%', maxWidth: '560px', minWidth: 0, boxSizing: 'border-box', padding: '10px',
+            backgroundColor: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)',
+            borderRadius: qolEditorRadii.card, overflow: 'hidden',
+            boxShadow: 'var(--dsw-alias-shadow-lv2, 0 4px 16px rgba(0, 0, 0, 0.08))',
           },
         }, [
           h('textarea', {
@@ -2648,21 +2678,24 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
               if (e.key === 'Escape') { e.preventDefault(); handleCancelEdit(); }
               else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); handleSave(); }
             },
+            ...qolEditorFieldHandlers('var(--dsw-alias-border-l1)'),
             style: {
               display: 'block', width: '100%', margin: 0, minHeight: '56px', height: '56px',
               maxHeight: 'min(160px, 35vh)', boxSizing: 'border-box', resize: 'vertical',
-              padding: '8px', borderRadius: '7px', border: '1px solid var(--dsw-alias-border-l1)',
+              padding: '9px 11px', borderRadius: qolEditorRadii.field, border: '1px solid var(--dsw-alias-border-l1)',
               backgroundColor: 'var(--dsw-alias-bg-base)', color: 'var(--dsw-alias-label-primary)',
-              font: 'inherit', fontSize: '14px', lineHeight: '20px', outlineOffset: '-2px',
+              font: 'inherit', fontSize: '14px', lineHeight: '20px', outline: 'none',
+              transition: 'border-color 0.15s',
             },
           }),
           error && h('div', { key: 'error', role: 'alert', style: {
-            marginTop: '8px', padding: '6px 8px', borderRadius: '6px', fontSize: '12px',
-            backgroundColor: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-label-primary)', overflowWrap: 'anywhere',
+            marginTop: '8px', padding: '7px 10px', borderRadius: qolEditorRadii.field, fontSize: '12px', lineHeight: '16px',
+            border: '1px solid var(--dsw-alias-state-error-primary)',
+            backgroundColor: 'var(--dsw-alias-bg-layer-2)', color: 'var(--dsw-alias-state-error-primary)', overflowWrap: 'anywhere',
           } }, error),
           h('div', { key: 'buttons', style: {
             display: 'grid', gridTemplateColumns: 'repeat(3, minmax(0, 1fr))',
-            gap: '6px', width: 'min(100%, 348px)', margin: '8px 0 0 auto',
+            gap: '6px', width: 'min(100%, 348px)', margin: '10px 0 2px auto',
           } }, [
             button(mt('edit.cancel'), handleCancelEdit, { disabled: busy !== null }),
             button(mt(busy === 'branch' ? 'edit.creating' : 'edit.newChat'), () => handleSave(true), {
@@ -2683,7 +2716,7 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
       style: {
         display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '28px', height: '28px',
         backgroundColor: 'transparent', border: 'none', color: 'var(--dsw-alias-label-secondary)',
-        cursor: 'pointer', borderRadius: '7px', padding: 0, transition: 'background-color 0.15s',
+        cursor: 'pointer', borderRadius: '999px', padding: 0, transition: 'background-color 0.15s',
       },
       onMouseEnter: e => { e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))'; },
       onMouseLeave: e => { e.currentTarget.style.backgroundColor = 'transparent'; },
@@ -2693,7 +2726,12 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
       h('div', { key: 'actions', className: 'qol-user-actions', style: {
         display: 'flex', alignItems: 'center', gap: '4px', marginTop: '4px', paddingRight: '4px',
       } }, [
-        isEdited && h('span', { key: 'edited', style: { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)', marginRight: '5px' } }, mt('edit.editedBadge')),
+        isEdited && h('span', { key: 'edited', style: {
+          fontSize: '10px', lineHeight: '14px', fontWeight: 500, letterSpacing: '0.02em',
+          color: 'var(--dsw-alias-label-secondary)', backgroundColor: 'var(--dsw-alias-bg-layer-2)',
+          border: '1px solid var(--dsw-alias-border-l1)', borderRadius: '999px',
+          padding: '2px 8px', marginRight: '5px',
+        } }, mt('edit.editedBadge')),
         iconButton(CopyIcon, copied ? 'Copied!' : 'Copy', handleCopy),
         iconButton(EditIcon, mt('edit.action'), handleStartEdit, editButtonRef),
       ]),
@@ -2779,13 +2817,25 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
       }, [
         queueError && h('div', {
           role: 'alert',
-          style: { display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px', color: 'var(--dsw-alias-label-primary)' },
+          style: {
+            display: 'flex', alignItems: 'center', gap: '8px', padding: '8px 12px',
+            borderBottom: '1px solid var(--dsw-alias-border-l1)',
+            color: 'var(--dsw-alias-state-error-primary)',
+            backgroundColor: 'var(--dsw-alias-bg-layer-2)',
+          },
         }, [
           h('span', { style: { flex: 1 } }, queueError),
           h('button', {
             type: 'button', title: mt('queue.dismissError'), 'aria-label': mt('queue.dismissError'),
             onClick: () => setQueueError(null),
-            style: { color: 'inherit', background: 'transparent', border: 'none', cursor: 'pointer' },
+            style: {
+              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+              width: '20px', height: '20px', borderRadius: '999px',
+              color: 'inherit', backgroundColor: 'transparent', border: 'none', cursor: 'pointer',
+              fontSize: '14px', lineHeight: '14px', transition: 'background-color 0.15s',
+            },
+            onMouseEnter: e => { e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))'; },
+            onMouseLeave: e => { e.currentTarget.style.backgroundColor = 'transparent'; },
           }, '×'),
         ]),
         // Header when multiple rows
@@ -2855,8 +2905,7 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                         handleSaveQueueEdit(row);
                       }
                     },
-                    onFocus: e => { e.currentTarget.style.borderColor = 'var(--dsw-alias-border-l2)'; },
-                    onBlur: e => { e.currentTarget.style.borderColor = 'var(--dsw-alias-border-l1)'; },
+                    ...qolEditorFieldHandlers('var(--dsw-alias-border-l1)'),
                     autoFocus: true,
                     style: {
                       width: '100%',
@@ -2864,19 +2913,26 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                       boxSizing: 'border-box',
                       backgroundColor: 'var(--dsw-alias-bg-base)',
                       border: '1px solid var(--dsw-alias-border-l1)',
-                      borderRadius: 'var(--dsw-radius-sm, 6px)',
-                      padding: '8px 10px',
+                      borderRadius: qolEditorRadii.field,
+                      padding: '9px 11px',
                       fontSize: '13px',
                       lineHeight: '18px',
                       fontFamily: 'inherit',
                       color: 'var(--dsw-alias-label-primary)',
                       resize: 'vertical',
                       outline: 'none',
-                      transition: 'border-color 0.15s ease',
+                      transition: 'border-color 0.15s',
                     },
                   }),
                   rowAttachments.length > 0 && h('div', {
-                    style: { fontSize: '11px', color: 'var(--dsw-alias-label-secondary)' },
+                    style: {
+                      display: 'inline-flex', alignSelf: 'flex-start', alignItems: 'center', gap: '5px',
+                      fontSize: '11px', lineHeight: '16px',
+                      color: 'var(--dsw-alias-label-secondary)',
+                      backgroundColor: 'var(--dsw-alias-bg-layer-2)',
+                      border: '1px solid var(--dsw-alias-border-l1)',
+                      borderRadius: '999px', padding: '3px 9px',
+                    },
                   }, mt('edit.attachmentsRetained', { count: rowAttachments.length })),
                   h('div', {
                     style: { display: 'flex', justifyContent: 'flex-end', gap: '8px' },
@@ -2886,17 +2942,20 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                       disabled: isBusy,
                       onClick: () => setEditing(null),
                       style: {
-                        padding: '5px 12px',
+                        padding: '6px 14px',
                         fontSize: '12px',
+                        lineHeight: '16px',
                         backgroundColor: 'transparent',
                         border: '1px solid var(--dsw-alias-border-l1)',
                         color: 'var(--dsw-alias-label-secondary)',
-                        borderRadius: 'var(--dsw-radius-sm, 6px)',
-                        cursor: 'pointer',
+                        borderRadius: qolEditorRadii.button,
+                        cursor: isBusy ? 'not-allowed' : 'pointer',
+                        opacity: isBusy ? 0.45 : 1,
                         transition: 'background-color 0.15s, color 0.15s',
                       },
                       onMouseEnter: e => {
-                        e.currentTarget.style.backgroundColor = 'var(--dsw-alias-bg-layer-2)';
+                        if (isBusy) return;
+                        e.currentTarget.style.backgroundColor = 'var(--dsw-alias-interactive-bg-hover, var(--dsw-alias-bg-layer-2))';
                         e.currentTarget.style.color = 'var(--dsw-alias-label-primary)';
                       },
                       onMouseLeave: e => {
@@ -2909,19 +2968,28 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                       disabled: isBusy || !editing.text.trim(),
                       onClick: () => handleSaveQueueEdit(row),
                       style: {
-                        padding: '5px 14px',
+                        padding: '6px 16px',
                         fontSize: '12px',
-                        backgroundColor: 'var(--dsw-alias-label-primary)',
+                        lineHeight: '16px',
+                        backgroundColor: qolEditorPrimaryFill,
                         color: 'var(--dsw-alias-bg-base)',
                         border: 'none',
-                        borderRadius: 'var(--dsw-radius-sm, 6px)',
-                        cursor: 'pointer',
+                        borderRadius: qolEditorRadii.button,
+                        cursor: isBusy || !editing.text.trim() ? 'not-allowed' : 'pointer',
                         fontWeight: 500,
+                        opacity: isBusy || !editing.text.trim() ? 0.45 : 1,
                         boxShadow: '0 1px 2px rgba(0, 0, 0, 0.08)',
-                        transition: 'opacity 0.15s ease',
+                        transition: 'opacity 0.15s, background-color 0.15s',
                       },
-                      onMouseEnter: e => { e.currentTarget.style.opacity = '0.88'; },
-                      onMouseLeave: e => { e.currentTarget.style.opacity = '1'; },
+                      onMouseEnter: e => {
+                        if (isBusy || !editing.text.trim()) return;
+                        e.currentTarget.style.backgroundColor = qolEditorPrimaryHover;
+                        e.currentTarget.style.opacity = '0.92';
+                      },
+                      onMouseLeave: e => {
+                        e.currentTarget.style.backgroundColor = qolEditorPrimaryFill;
+                        e.currentTarget.style.opacity = '1';
+                      },
                     }, isBusy ? '…' : mt('queue.save')),
                   ]),
                 ])
@@ -2948,10 +3016,12 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                   }, [
                     rowAttachments.length > 0 && h('span', {
                       style: {
-                        fontSize: '11px',
+                        fontSize: '10px',
+                        lineHeight: '14px',
                         backgroundColor: 'var(--dsw-alias-bg-layer-2)',
-                        padding: '2px 6px',
-                        borderRadius: '4px',
+                        border: '1px solid var(--dsw-alias-border-l1)',
+                        padding: '2px 7px',
+                        borderRadius: '999px',
                         color: 'var(--dsw-alias-label-secondary)',
                         flexShrink: 0,
                       },
@@ -2991,7 +3061,7 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                         border: 'none',
                         color: 'var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))',
                         cursor: 'pointer',
-                        borderRadius: 'var(--dsw-radius-sm, 6px)',
+                        borderRadius: '999px',
                         padding: 0,
                         transition: 'background-color 0.15s, color 0.15s',
                       },
@@ -3021,7 +3091,7 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                         border: 'none',
                         color: 'var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))',
                         cursor: 'pointer',
-                        borderRadius: 'var(--dsw-radius-sm, 6px)',
+                        borderRadius: '999px',
                         padding: 0,
                         transition: 'background-color 0.15s, color 0.15s',
                       },
@@ -3051,7 +3121,7 @@ function registerMessagesClient(ctx, React, modulesStore = qolModulesStore) {
                         border: 'none',
                         color: 'var(--dsw-alias-label-tertiary, var(--dsw-alias-label-secondary))',
                         cursor: 'pointer',
-                        borderRadius: 'var(--dsw-radius-sm, 6px)',
+                        borderRadius: '999px',
                         padding: 0,
                         transition: 'background-color 0.15s, color 0.15s',
                       },
